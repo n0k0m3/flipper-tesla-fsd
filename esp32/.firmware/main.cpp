@@ -33,6 +33,7 @@
 #include "capability.h"
 #include "profile_match.h"
 #include "gear_tx_route.h"
+#include "scroll_ack.h"                   // DAS Scroll Ack state machine (0x3C2 left ticks)
 #include "../../fsd_logic/fsd_events.h"
 #include "../../fsd_logic/fsd_can_ops.h"  // tesla_can_rx_accept
 #include "../../fsd_logic/fsd_bms.h"      // fsd_bms_temp_fresh
@@ -265,6 +266,10 @@ static bool send_generated_frame(CanBusId bus, const CanFrame &frame) {
 static bool send_modified_frame(CanBusId bus, const CanFrame &frame) {
     return send_on_bus(bus, frame);
 }
+
+// DAS Scroll Ack episode state (0x3C2 left ticks). One instance per boot; the
+// handler in process_frame() owns it. Zero-initialised starts Armed.
+static ScrollAckRuntime g_scroll_ack = {};
 
 // Last 0x229 counter per bus. A press goes out only on a bus fresh here.
 static GearCounterCache g_gear_counter[CAN_ACTIVE_BUS_COUNT] = {};
@@ -1447,6 +1452,9 @@ static NOINLINE void process_frame(CanBusId bus, const CanFrame &frame) {
         uint8_t ho = g_state.das_hands_on_state;
         state_exit();
         if (g_serial_debug) debug_log_das_status(bus, frame.id);
+        // DAS Scroll Ack: mark a fresh standard HW4 DAS source, primary channel
+        // only. A secondary gateway copy or a custom-mapped id must not stamp it.
+        if (bus == CAN_BUS_PRIMARY) scroll_ack_note_das39b(&g_scroll_ack, now);
         // Variant-profile auto-suggest (#126): feed the raw frame + what the std
         // parser made of it, so a stuck parser can be detected and matched.
         profile_match_record(frame, ap, ho, now);
@@ -1655,6 +1663,35 @@ static NOINLINE void process_frame(CanBusId bus, const CanFrame &frame) {
                  fsd_soft_engage_allows(&g_state, millis()) &&   // Soft Engage holds until wheel centred (#108)
                  fsd_abort_guard_allows(&g_state);     // Abort Guard cuts injection on an abort (#108)
     state_exit();
+
+    // DAS Scroll Ack (0x3C2 left ticks, HW4-only) — copy the car's own idle
+    // page-1 frame and send one balanced -1/+1 left-scroll pair after fresh HW4
+    // 0x39B reports AP state 6 + hands-on state 3. Primary channel only; one pair
+    // per state-3 episode; follows native pacing, no timer. The state machine
+    // (scroll_ack.h) owns the episode; here we feed it a consistent snapshot.
+    if (frame.id == CAN_ID_VCLEFT_SWITCH) {
+        ScrollAckInput in;
+        state_enter();
+        in.enabled     = g_state.scroll_ack;
+        in.tx_allowed  = tx && ap_ok;
+        in.primary_bus = (bus == CAN_BUS_PRIMARY);
+        in.fresh_native = fresh;
+        in.hw4         = (g_state.hw_version == TeslaHW_HW4);
+        in.ap_state    = g_state.das_ap_state;
+        in.hands_on    = g_state.das_hands_on_state;
+        state_exit();
+        CanFrame out;
+        ScrollAckAction act = scroll_ack_step(&g_scroll_ack, in, frame, now, &out);
+        if (act != ScrollAckAction::None) {
+            bool sent = send_on_bus(bus, out);
+            scroll_ack_complete(&g_scroll_ack, act, sent);
+            if (sent) {
+                can_dump_log("SCRL 0x3C2 left tick %s TX",
+                             act == ScrollAckAction::FirstTick ? "-1" : "+1");
+            }
+        }
+        return;
+    }
 
     // NAG killer — build echo only when TX is currently allowed.
     if (frame.id == CAN_ID_EPAS_STATUS) {
