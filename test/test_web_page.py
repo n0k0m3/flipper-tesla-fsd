@@ -61,8 +61,19 @@ def compiled_page(work, defines):
     return subprocess.run([exe], check=True, stdout=subprocess.PIPE).stdout
 
 
+def check_dashboard_source():
+    """The dashboard C++ must carry the Scroll Ack control end to end: the
+    checkbox command, its DOM id, the command handler, and the JSON field."""
+    with open(os.path.join(FIRMWARE, "web_dashboard.cpp"), encoding="utf-8") as f:
+        src = f.read()
+    for needle in ("cmd('scroll_ack'", 'id="swScrollAck"', 'cmd.is("scroll_ack")',
+                   '\\"scroll_ack\\":'):
+        check(needle in src, "web_dashboard.cpp missing %r" % needle)
+
+
 def main():
     print("test_web_page: gzip page vs the compiled WEB_HTML")
+    check_dashboard_source()
     envs = env_defines()
     check(len(envs) > 0, "no envs in platformio.ini")
     with tempfile.TemporaryDirectory() as work:

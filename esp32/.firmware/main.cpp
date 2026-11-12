@@ -499,6 +499,7 @@ void recompute_rx_filter() {
     flag                   = g_state.rx_id_whitelist;
     blackbox               = g_state.blackbox_enabled;
     rxw_in.track_mode_inject = g_state.track_mode_inject;
+    rxw_in.scroll_ack        = g_state.scroll_ack;
     rxw_in.tlssc_restore     = g_state.tlssc_restore;
     rxw_in.cfg_das_id        = g_state.cfg_das_id;
     rxw_in.cfg_steer_id      = g_state.cfg_steer_id;

@@ -104,6 +104,9 @@ static const uint32_t FSD_RXW_TRACK_MODE_IDS[] = {
 static const uint32_t FSD_RXW_TLSSC_IDS[] = {
     0x331u,  // CAN_ID_DAS_AP_CONFIG   — TLSSC Restore (read-modify-retransmit)
 };
+static const uint32_t FSD_RXW_SCROLL_ACK_IDS[] = {
+    0x3C2u,  // CAN_ID_VCLEFT_SWITCH   — DAS Scroll Ack source (copy idle page-1)
+};
 
 // Append `id` (masked to 11 bits) to out[0..*n) unless already present or full.
 // Returns false and leaves the set unchanged when it is already at `cap`
@@ -177,6 +180,10 @@ static inline bool fsd_rx_whitelist_needed(const FSDState *s,
     if (s && s->tlssc_restore) {
         ok = ok && fsd_rxw_add_table(out_ids, cap, &n, FSD_RXW_TLSSC_IDS,
                                      sizeof(FSD_RXW_TLSSC_IDS) / sizeof(uint32_t));
+    }
+    if (s && s->scroll_ack) {
+        ok = ok && fsd_rxw_add_table(out_ids, cap, &n, FSD_RXW_SCROLL_ACK_IDS,
+                                     sizeof(FSD_RXW_SCROLL_ACK_IDS) / sizeof(uint32_t));
     }
 
     // 4. Black-box key ids.

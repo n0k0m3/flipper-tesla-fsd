@@ -54,6 +54,8 @@ static void test_page_messages() {
         {"{\"cmd\":\"mode\",\"value\":null}", "mode", "null"},
         {"{\"cmd\":\"nag\",\"value\":true}", "nag", "true"},
         {"{\"cmd\":\"nag\",\"value\":false}", "nag", "false"},
+        {"{\"cmd\":\"scroll_ack\",\"value\":true}", "scroll_ack", "true"},
+        {"{\"cmd\":\"scroll_ack\",\"value\":false}", "scroll_ack", "false"},
         {"{\"cmd\":\"14x_warning\",\"value\":false}", "14x_warning", "false"},
         {"{\"cmd\":\"hw_override\",\"value\":3}", "hw_override", "3"},
         {"{\"cmd\":\"apmv3_branch\",\"value\":255}", "apmv3_branch", "255"},
@@ -81,6 +83,10 @@ static void test_page_messages() {
     char s[40];
     CHECK(parse("{\"cmd\":\"nag\",\"value\":true}", &cmd) && cmd.boolean(&b) && b, "bool true");
     CHECK(parse("{\"cmd\":\"nag\",\"value\":false}", &cmd) && cmd.boolean(&b) && !b, "bool false");
+    CHECK(parse("{\"cmd\":\"scroll_ack\",\"value\":true}", &cmd) && cmd.boolean(&b) && b,
+          "scroll_ack bool true");
+    CHECK(parse("{\"cmd\":\"scroll_ack\",\"value\":false}", &cmd) && cmd.boolean(&b) && !b,
+          "scroll_ack bool false");
     CHECK(parse("{\"cmd\":\"sleep\",\"value\":120000}", &cmd) && cmd.integer(&n) && n == 120000, "int");
     CHECK(parse("{\"cmd\":\"hw_override\",\"value\":0}", &cmd) && cmd.integer(&n) && n == 0, "int 0");
     CHECK(parse("{\"cmd\":\"blackbox_delete\",\"value\":\"evt_0001\"}", &cmd) &&

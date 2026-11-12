@@ -732,6 +732,12 @@ input:checked+.sl2:before{transform:translateX(20px);background:#fff}
   </div>
   <div class="row" style="display:block">
     <div style="display:flex;align-items:center;justify-content:space-between">
+      <span class="lbl">Scroll Ack (experimental)<br><small style="color:var(--muted)">HW4 only. After the car reports AP state 6 and hands-on 3, copies the car's own idle 0x3C2 and sends one left-scroll pair (&minus;1 then +1) to acknowledge the hands-on prompt. Vehicle bus only; one pair per prompt. Not car-validated.</small></span>
+      <label class="sw"><input type="checkbox" id="swScrollAck" onchange="cmd('scroll_ack',this.checked)"><span class="sl2"></span></label>
+    </div>
+  </div>
+  <div class="row" style="display:block">
+    <div style="display:flex;align-items:center;justify-content:space-between">
       <span class="lbl">Track Mode (experimental)<br><small style="color:var(--muted)">Experimental &mdash; Vehicle-bus; not car-validated. Defaults to rear-biased (rotation 100) + 30% stability &mdash; fun with a safety margin. Raise stability for stock feel.</small></span>
       <label class="sw"><input type="checkbox" id="swTrkMode" onchange="cmd('track_mode_inject',this.checked)"><span class="sl2"></span></label>
     </div>
@@ -1216,6 +1222,7 @@ function updateControlsSummary(d){
   if(d.assist_tlssc_bit38)items.push('TLSSC bit38');
   if(d.accel_mode>0)items.push('Accel '+(['','Chill','Standard','Performance'][d.accel_mode]||'?'));
   if(d.cp_type_eu_rewrite)items.push('EU CP Type');
+  if(d.scroll_ack)items.push('Scroll Ack');
   if(d.display_enabled)items.push('Display');
   if(d.can_dump)items.push('CAN Dump');
   if(d.mcp_rx_task&&d.mcp_rx_task.on)items.push('MCP2515 RX task');
@@ -1512,6 +1519,7 @@ function updControls(d){
     if(mr.run) mrSt.innerHTML=mw(mr.int?'Running, INT pin':'Running, 1 ms poll')+' \u00b7 '+mw('queue max')+'\u00a0'+mr.max+'/'+mr.len+' \u00b7 '+mw('lost on a full queue')+'\u00a0'+mr.drop+' \u00b7 '+mw('chip overflows')+'\u00a0'+mr.ovf;
     else mrSt.innerHTML=mw(mr.on?'Waiting for the MCP2515':'Off (read from the loop)');
   }
+  if(document.getElementById('swScrollAck')) document.getElementById('swScrollAck').checked=d.scroll_ack;
   if(document.getElementById('swTrkMode')) document.getElementById('swTrkMode').checked=d.track_mode_inject;
   if(document.getElementById('trkRot')&&focusId()!=='trkRot'&&d.track_rotation_pct!==undefined){document.getElementById('trkRot').value=d.track_rotation_pct;var _tr=document.getElementById('trkRotV');if(_tr)_tr.textContent=d.track_rotation_pct;}
   if(document.getElementById('trkStab')&&focusId()!=='trkStab'&&d.track_stability_pct!==undefined){document.getElementById('trkStab').value=d.track_stability_pct;var _ts=document.getElementById('trkStabV');if(_ts)_ts.textContent=d.track_stability_pct;}
@@ -2529,6 +2537,7 @@ static String build_json() {
     j += "\"assist_telemetry_off\":"; j += state.assist_telemetry_off    ? "true" : "false"; j += ',';
     j += "\"apmv3_branch\":";  j += (int)state.apmv3_branch;             j += ',';
     j += "\"track_mode_inject\":"; j += state.track_mode_inject         ? "true" : "false"; j += ',';
+    j += "\"scroll_ack\":"; j += state.scroll_ack                       ? "true" : "false"; j += ',';
     j += "\"track_rotation_pct\":";  j += (int)state.track_rotation_pct;   j += ',';
     j += "\"track_stability_pct\":"; j += (int)state.track_stability_pct;  j += ',';
     j += "\"track_post_cooling\":"; j += state.track_post_cooling        ? "true" : "false"; j += ',';
@@ -3189,6 +3198,18 @@ static WebCmdResult web_command(WebCmd &cmd, const uint8_t *payload, size_t leng
             state_exit();
             Serial.printf("[Web] Track Mode inject: %s\n", enabled ? "ON" : "OFF");
             prefs_save(&saved);
+        }
+    } else if (cmd.is("scroll_ack")) {
+        bool enabled;
+        if (cmd.boolean(&enabled)) {
+            FSDState saved;
+            state_enter();
+            g_state->scroll_ack = enabled;
+            saved = *g_state;
+            state_exit();
+            Serial.printf("[Web] DAS Scroll Ack: %s\n", enabled ? "ON" : "OFF");
+            prefs_save(&saved);
+            recompute_rx_filter();  // admit/drop 0x3C2 right away when whitelist is on
         }
     } else if (cmd.is("track_rotation_pct")) {
         int n;

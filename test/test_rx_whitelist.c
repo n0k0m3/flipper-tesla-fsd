@@ -193,6 +193,23 @@ static void test_per_feature_coverage(void) {
     memset(&s, 0, sizeof(s));
     { const uint32_t w[] = {0x132u, 0x292u, 0x312u, 0x33Au, 0x219u, 0x175u};
       expect_contains("bms_readouts", &s, w, 6); }
+
+    // DAS Scroll Ack → 0x3C2 source + 0x39B DAS state (0x39B is an essential).
+    memset(&s, 0, sizeof(s));
+    s.scroll_ack = true;
+    { const uint32_t w[] = {0x3C2u, 0x39Bu}; expect_contains("scroll_ack", &s, w, 2); }
+
+    // With Scroll Ack OFF, 0x3C2 must NOT be admitted (0x39B stays, it is essential).
+    {
+        memset(&s, 0, sizeof(s));
+        s.scroll_ack = false;
+        uint32_t ids[FSD_RXW_MAX_IDS];
+        size_t n = 0;
+        bool accept_all = derive(&s, false, ids, &n);
+        CHECK(!accept_all, "scroll_ack off: derivation returned accept-all");
+        CHECK(!has(ids, n, 0x3C2u), "scroll_ack off: 0x3C2 must be absent");
+        CHECK(has(ids, n, 0x39Bu), "scroll_ack off: 0x39B still present");
+    }
 }
 
 // ── 4. black-box adds every key id (0x488 is the unique one) ──────────────────

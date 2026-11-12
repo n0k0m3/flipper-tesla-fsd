@@ -48,6 +48,7 @@ void prefs_load(FSDState *state) {
     state->firmware_14x_warning     = g_prefs.getBool("14x",    true);
     state->blackbox_enabled         = g_prefs.getBool("bbx",    BLACKBOX_DEFAULT_ENABLED);
     state->track_mode_inject        = g_prefs.getBool("tmInj",  false);
+    state->scroll_ack               = g_prefs.getBool("scrAck", false);
     state->track_rotation_pct       = g_prefs.getUChar("tmRot", 100);
     state->track_stability_pct      = g_prefs.getUChar("tmStab", 30);
     state->track_post_cooling       = g_prefs.getBool("tmPC",   false);
@@ -138,6 +139,7 @@ void prefs_save(const FSDState *state) {
     g_prefs.putBool("14x",    state->firmware_14x_warning);
     g_prefs.putBool("bbx",    state->blackbox_enabled);
     g_prefs.putBool("tmInj",  state->track_mode_inject);
+    g_prefs.putBool("scrAck", state->scroll_ack);
     g_prefs.putUChar("tmRot", state->track_rotation_pct);
     g_prefs.putUChar("tmStab",state->track_stability_pct);
     g_prefs.putBool("tmPC",   state->track_post_cooling);
