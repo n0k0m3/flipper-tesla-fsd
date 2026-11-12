@@ -333,9 +333,19 @@ And these Vehicle CAN signals have been reported writable there:
 >
 > A dual-CAN board (e.g. **LILYGO T-2CAN**) gives the full attack surface in
 > one device: pin 13/14 for `0x3FD` / `0x370` / `0x3F8` / TLSSC, and Vehicle CAN
-> (9/10) for `0x3C2`. This ships as the `lilygo-t2can` platformio env. Note:
-> ScrollPress AP (`0x3C2`) is only implemented in the Flipper app so far; the
-> ESP32 build doesn't inject `0x3C2`.
+> (9/10) for `0x3C2`. This ships as the `lilygo-t2can` platformio env.
+>
+> Two `0x3C2` features exist, and they are different:
+> - **ScrollPress AP** (the press gesture, PR #82) is Flipper-only. The ESP32
+>   build does not run it.
+> - **Scroll Ack** (left-scroll `-1`/`+1` pair, HW4 only) is the ESP32 feature.
+>   It needs `0x3C2` on the tapped Vehicle CAN pair to copy the car's own idle
+>   frame, and it needs HW4 DAS status on `0x39B` (same or another tapped pair)
+>   to read AP state and hands-on state. Tap pin 9/10 (or OBD-II) for `0x3C2`;
+>   pin 13/14 does not carry it. The classic T-2CAN on Vehicle CAN is the
+>   car-validation target. The other TWAI and MCP2515 builds compile but are not
+>   validated on a car, and the sniffer build cannot transmit. Default OFF.
+>   Remove any external scroll device (for example a TSL6) before validation.
 
 > [!IMPORTANT]
 > **On HW4-modern, `0x370` EPAS3P_sysStatus is the mirror case of `0x3C2`: it is
