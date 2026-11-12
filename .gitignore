@@ -23,5 +23,6 @@ test/test_loop_health
 test/test_power_log
 test/test_page_send
 test/test_rx_whitelist
+test/test_scroll_ack
 *.dSYM/
 /.vs
