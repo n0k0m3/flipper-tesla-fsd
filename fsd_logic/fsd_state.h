@@ -198,6 +198,13 @@ typedef struct FSDState {
     bool scroll_press_armed;         // true once das_ap_state==0 observed (required before each fire)
     uint32_t scroll_press_phase_ms;  // now_ms at the start of the current phase (timing reference)
 
+    // --- DAS Scroll Ack (0x3C2 VCLEFT_switchStatus left ticks, HW4-only, ESP32) ---
+    // Opt-in. After fresh HW4 0x39B reports AP state 6 + hands-on state 3, emit
+    // one balanced left-scroll pair (-1 then +1) by copying the car's own idle
+    // page-1 0x3C2 frame. Primary channel only; one pair per state-3 episode.
+    // The episode runtime lives in main.cpp (ScrollAckRuntime), not here.
+    bool scroll_ack;                 // master opt-in, default OFF
+
     // --- Configurable nag-context signal mapping (#122) ---
     // When cfg_das_id != 0, the RX path reads DAS_autopilotState + handsOnState
     // from these positions instead of the auto-detected parser — lets users with

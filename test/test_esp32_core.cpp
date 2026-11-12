@@ -852,6 +852,7 @@ static void test_state_init(void) {
     CHECK(s.accel_mode == ACCEL_MODE_OFF && s.accel_mode_applied == ACCEL_MODE_OFF &&
               !s.accel_car_seen,
           "init: Acceleration Mode default Off (#211)");
+    CHECK(!s.scroll_ack, "init: DAS Scroll Ack default OFF");
 }
 
 // ── 0x3FD mux2 HW4 speed profile layout (#59), parity with the Flipper core ───

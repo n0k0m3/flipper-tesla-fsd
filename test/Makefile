@@ -62,7 +62,12 @@ test_page_send: test_page_send.cpp $(ESP32)/page_send.h
 test_rx_whitelist: test_rx_whitelist.c $(ROOT)/fsd_logic/fsd_rx_whitelist.h $(ROOT)/fsd_logic/fsd_state.h $(ROOT)/fsd_logic/fsd_blackbox_filter.h $(ROOT)/fsd_logic/fsd_types.h $(ROOT)/fsd_logic/fsd_perf.h $(ROOT)/fsd_logic/fsd_tpms.h
 	$(CC) $(CFLAGS) -I$(ROOT)/fsd_logic test_rx_whitelist.c -o $@ -lm
 
-check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe test_can_mcp2518fd test_web_cmd test_web_origin test_can_counters test_loop_health test_power_log test_page_send test_rx_whitelist
+# test_scroll_ack covers esp32/.firmware/scroll_ack.h (the DAS Scroll Ack state
+# machine — trigger values, output bytes, freshness, idle validation, one pair).
+test_scroll_ack: test_scroll_ack.cpp $(ESP32)/scroll_ack.h $(ESP32)/fsd_handler.h $(ESP32)/config.h $(ROOT)/fsd_logic/fsd_types.h $(ROOT)/fsd_logic/fsd_state.h
+	$(CXX) $(CXXFLAGS) -I$(ESP32) -I$(ROOT)/fsd_logic test_scroll_ack.cpp -o $@
+
+check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe test_can_mcp2518fd test_web_cmd test_web_origin test_can_counters test_loop_health test_power_log test_page_send test_rx_whitelist test_scroll_ack
 	./test_fsd_core
 	./test_esp32_core
 	./test_can_capture_filter
@@ -75,9 +80,10 @@ check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe 
 	./test_power_log
 	./test_page_send
 	./test_rx_whitelist
+	./test_scroll_ack
 	CXX="$(CXX)" python3 test_web_page.py
 
 clean:
-	rm -rf test_fsd_core test_fsd_core.dSYM test_esp32_core test_esp32_core.dSYM test_can_capture_filter test_can_capture_filter.dSYM test_captive_probe test_captive_probe.dSYM test_can_mcp2518fd test_can_mcp2518fd.dSYM test_web_cmd test_web_cmd.dSYM test_web_origin test_web_origin.dSYM test_can_counters test_can_counters.dSYM test_loop_health test_loop_health.dSYM test_power_log test_power_log.dSYM test_page_send test_page_send.dSYM test_rx_whitelist test_rx_whitelist.dSYM
+	rm -rf test_fsd_core test_fsd_core.dSYM test_esp32_core test_esp32_core.dSYM test_can_capture_filter test_can_capture_filter.dSYM test_captive_probe test_captive_probe.dSYM test_can_mcp2518fd test_can_mcp2518fd.dSYM test_web_cmd test_web_cmd.dSYM test_web_origin test_web_origin.dSYM test_can_counters test_can_counters.dSYM test_loop_health test_loop_health.dSYM test_power_log test_power_log.dSYM test_page_send test_page_send.dSYM test_rx_whitelist test_rx_whitelist.dSYM test_scroll_ack test_scroll_ack.dSYM
 
 .PHONY: check clean
