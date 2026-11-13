@@ -32,6 +32,7 @@ static const uint32_t FSD_BLACKBOX_KEY_IDS[] = {
     0x370u,  // EPAS3P_sysStatus     — nag killer / EPAS
     0x399u,  // DAS_status (HW3/Legacy), also ISA speed on HW4
     0x39Bu,  // DAS_status (HW4)
+    0x3C2u,  // VCLEFT_switchStatus  — Scroll Ack native RX + injected TX
     0x488u,  // DAS_steeringControl  — DAS steering request/angle
     0x129u,  // SCCM_steeringAngleSensor — steering angle (#108 soft-engage gate)
     0x3EEu,  // DAS_autopilot        — AP legacy

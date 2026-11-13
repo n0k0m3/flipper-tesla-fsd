@@ -3535,6 +3535,7 @@ static void test_blackbox_filter(void) {
     CHECK(fsd_blackbox_should_record(CAN_ID_BMS_THERMAL),     "0x312 pack temp in set");
     CHECK(fsd_blackbox_should_record(CAN_ID_BMS_SOC),         "0x292 pack SOC in set");
     CHECK(fsd_blackbox_should_record(CAN_ID_UI_RANGE),        "0x33A car SOC in set");
+    CHECK(fsd_blackbox_should_record(CAN_ID_VCLEFT_SWITCH),   "0x3C2 Scroll Ack RX/TX in set");
 
     // 0x257 thinned to one frame per FSD_BLACKBOX_THIN_MS per bus; other ids untouched.
     FSDBlackboxThin th;
