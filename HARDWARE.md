@@ -338,11 +338,13 @@ And these Vehicle CAN signals have been reported writable there:
 > Two `0x3C2` features exist, and they are different:
 > - **ScrollPress AP** (the press gesture, PR #82) is Flipper-only. The ESP32
 >   build does not run it.
-> - **Scroll Ack** (left-scroll `-1`/`+1` pair, HW4 only) is the ESP32 feature.
+> - **Scroll Ack** (one left-scroll `-1`/`+1` pair per hands-on prompt, HW4
+>   only) is the ESP32 feature.
 >   It needs `0x3C2` on the tapped Vehicle CAN pair to copy the car's own idle
 >   frame, and it needs HW4 DAS status on `0x39B` (same or another tapped pair)
->   to read AP state and hands-on state. Tap pin 9/10 (or OBD-II) for `0x3C2`;
->   pin 13/14 does not carry it. The classic T-2CAN on Vehicle CAN is the
+>   to read AP state and hands-on state. Tap pin 9/10 for `0x3C2`. Pin 13/14 carries a forwarded
+>   copy, but the car ignores ticks sent there, so Scroll Ack skips any bus
+>   that also carries `0x370`. Either T-2CAN channel works. The classic T-2CAN is the
 >   car-validation target. The other TWAI and MCP2515 builds compile but are not
 >   validated on a car, and the sniffer build cannot transmit. Default OFF.
 >   Remove any external scroll device (for example a TSL6) before validation.
