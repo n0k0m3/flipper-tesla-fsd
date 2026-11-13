@@ -66,6 +66,13 @@ def check_dashboard_source():
     checkbox command, its DOM id, the command handler, and the JSON field."""
     with open(os.path.join(FIRMWARE, "web_dashboard.cpp"), encoding="utf-8") as f:
         src = f.read()
+    for needle in ("cmd('scroll_ack_mode'", 'id="selScrollMode"', 'cmd.is("scroll_ack_mode")',
+                   '\\"scroll_ack_mode\\":',
+                   "cmd('scroll_ack_pattern'", 'id="selScrollPat"', 'cmd.is("scroll_ack_pattern")',
+                   "cmd('scroll_ack_delay_ms'", "cmd('scroll_ack_gap_ms'", "cmd('scroll_ack_interval_ms'",
+                   '\\"scroll_ack_delay_ms\\":', '\\"scroll_ack_gap_ms\\":',
+                   '\\"scroll_ack_interval_ms\\":'):
+        check(needle in src, "web_dashboard.cpp missing %r" % needle)
     for needle in ("cmd('scroll_ack'", 'id="swScrollAck"', 'cmd.is("scroll_ack")',
                    '\\"scroll_ack\\":'):
         check(needle in src, "web_dashboard.cpp missing %r" % needle)

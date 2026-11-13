@@ -27,6 +27,7 @@
 #include "web_cmd.h"
 #include "web_origin.h"
 #include "page_send.h"
+#include "scroll_ack.h"
 #include "../../fsd_logic/fsd_cp_status.h"  // CP_status stale read-out (#228)
 #include "../../fsd_logic/fsd_bms.h"        // 0x312 pack-temperature freshness
 #include <WebServer.h>
@@ -43,6 +44,10 @@
 // Defined in main.cpp: reprogram the RX ID whitelist hardware filter after the
 // dashboard toggles it (no-op while the flag is OFF).
 extern void recompute_rx_filter();
+extern void scroll_ack_command_set_enabled(bool enabled, FSDState *saved);
+extern void scroll_ack_command_set_mode(int mode, FSDState *saved);
+extern uint32_t scroll_ack_get_sent_count();
+extern void scroll_ack_get_diagnostics(ScrollAckRuntime *out);
 
 // ── Module state ──────────────────────────────────────────────────────────────
 static FSDState  *g_state = nullptr;   // shared with main
@@ -732,8 +737,36 @@ input:checked+.sl2:before{transform:translateX(20px);background:#fff}
   </div>
   <div class="row" style="display:block">
     <div style="display:flex;align-items:center;justify-content:space-between">
-      <span class="lbl">Scroll Ack (experimental)<br><small style="color:var(--muted)">HW4 only. After the car reports AP state 6 and hands-on 3, copies the car's own idle 0x3C2 and sends one left-scroll pair (&minus;1 then +1) to acknowledge the hands-on prompt. Vehicle bus only; one pair per prompt. Not car-validated.</small></span>
+      <span class="lbl">Scroll Ack (experimental)<br><small style="color:var(--muted)">HW4 only. Copies the car's own idle 0x3C2 and sends a left-scroll pair (&minus;1 then +1), so the volume does not change. Only on the bus with 0x3C2 and no 0x370 (Vehicle CAN). Remove any other scroll device first. Not car-validated.</small></span>
       <label class="sw"><input type="checkbox" id="swScrollAck" onchange="cmd('scroll_ack',this.checked)"><span class="sl2"></span></label>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+      <span class="lbl"><small style="color:var(--muted)">Mode. On prompt: ticks when the hands-on prompt shows (AP 6 + hands-on 3), after the delay below. Timer: ticks every interval while AP is on, like the TSL6; the prompt never shows.</small></span>
+      <select id="selScrollMode" onchange="cmd('scroll_ack_mode',parseInt(this.value,10))">
+        <option value="0">On prompt</option>
+        <option value="1">Timer (TSL6)</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+      <span class="lbl"><small style="color:var(--muted)">Ticks (left wheel = volume). A pair cancels out. A single tick changes the volume one step each time.</small></span>
+      <select id="selScrollPat" onchange="cmd('scroll_ack_pattern',parseInt(this.value,10))">
+        <option value="0">&minus;1 then +1</option>
+        <option value="1">+1 then &minus;1</option>
+        <option value="2">+1 once (up)</option>
+        <option value="3">&minus;1 once (down)</option>
+      </select>
+    </div>
+    <div style="margin-top:8px">
+      <label style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>Prompt delay, mean <small>(prompt &rarr; first tick, &plusmn;50% random)</small></span><span id="scrDlyV">600</span></label>
+      <input type="range" id="scrDly" min="0" max="5000" step="100" style="width:100%" oninput="document.getElementById('scrDlyV').textContent=this.value" onchange="cmd('scroll_ack_delay_ms',parseInt(this.value,10))">
+    </div>
+    <div style="margin-top:6px">
+      <label style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>Gap between ticks, mean <small>(&plusmn;50% random, next idle frame)</small></span><span id="scrGapV">100</span></label>
+      <input type="range" id="scrGap" min="0" max="2000" step="50" style="width:100%" oninput="document.getElementById('scrGapV').textContent=this.value" onchange="cmd('scroll_ack_gap_ms',parseInt(this.value,10))">
+    </div>
+    <div style="margin-top:6px">
+      <label style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted)"><span>Timer interval, mean <small>(Timer mode, &plusmn;20% random)</small></span><span id="scrIntV">2500</span></label>
+      <input type="range" id="scrInt" min="1000" max="10000" step="250" style="width:100%" oninput="document.getElementById('scrIntV').textContent=this.value" onchange="cmd('scroll_ack_interval_ms',parseInt(this.value,10))">
     </div>
   </div>
   <div class="row" style="display:block">
@@ -1222,7 +1255,7 @@ function updateControlsSummary(d){
   if(d.assist_tlssc_bit38)items.push('TLSSC bit38');
   if(d.accel_mode>0)items.push('Accel '+(['','Chill','Standard','Performance'][d.accel_mode]||'?'));
   if(d.cp_type_eu_rewrite)items.push('EU CP Type');
-  if(d.scroll_ack)items.push('Scroll Ack');
+  if(d.scroll_ack)items.push(d.scroll_ack_mode===1?'Scroll Ack (timer)':'Scroll Ack');
   if(d.display_enabled)items.push('Display');
   if(d.can_dump)items.push('CAN Dump');
   if(d.mcp_rx_task&&d.mcp_rx_task.on)items.push('MCP2515 RX task');
@@ -1520,6 +1553,14 @@ function updControls(d){
     else mrSt.innerHTML=mw(mr.on?'Waiting for the MCP2515':'Off (read from the loop)');
   }
   if(document.getElementById('swScrollAck')) document.getElementById('swScrollAck').checked=d.scroll_ack;
+  var smSel=document.getElementById('selScrollMode');
+  if(smSel && d.scroll_ack_mode!==undefined && document.activeElement!==smSel) smSel.value=String(d.scroll_ack_mode);
+  var spSel=document.getElementById('selScrollPat');
+  if(spSel && d.scroll_ack_pattern!==undefined && document.activeElement!==spSel) spSel.value=String(d.scroll_ack_pattern);
+  [['scrDly','scroll_ack_delay_ms'],['scrGap','scroll_ack_gap_ms'],['scrInt','scroll_ack_interval_ms']].forEach(function(p){
+    var el=document.getElementById(p[0]);
+    if(el&&focusId()!==p[0]&&d[p[1]]!==undefined){el.value=d[p[1]];var v=document.getElementById(p[0]+'V');if(v)v.textContent=d[p[1]];}
+  });
   if(document.getElementById('swTrkMode')) document.getElementById('swTrkMode').checked=d.track_mode_inject;
   if(document.getElementById('trkRot')&&focusId()!=='trkRot'&&d.track_rotation_pct!==undefined){document.getElementById('trkRot').value=d.track_rotation_pct;var _tr=document.getElementById('trkRotV');if(_tr)_tr.textContent=d.track_rotation_pct;}
   if(document.getElementById('trkStab')&&focusId()!=='trkStab'&&d.track_stability_pct!==undefined){document.getElementById('trkStab').value=d.track_stability_pct;var _ts=document.getElementById('trkStabV');if(_ts)_ts.textContent=d.track_stability_pct;}
@@ -2538,6 +2579,23 @@ static String build_json() {
     j += "\"apmv3_branch\":";  j += (int)state.apmv3_branch;             j += ',';
     j += "\"track_mode_inject\":"; j += state.track_mode_inject         ? "true" : "false"; j += ',';
     j += "\"scroll_ack\":"; j += state.scroll_ack                       ? "true" : "false"; j += ',';
+    j += "\"scroll_ack_mode\":"; j += (int)state.scroll_ack_mode;          j += ',';
+    j += "\"scroll_ack_pattern\":"; j += (int)state.scroll_ack_pattern;    j += ',';
+    j += "\"scroll_ack_delay_ms\":"; j += (int)state.scroll_ack_delay_ms;  j += ',';
+    j += "\"scroll_ack_gap_ms\":"; j += (int)state.scroll_ack_gap_ms;      j += ',';
+    j += "\"scroll_ack_interval_ms\":"; j += (int)state.scroll_ack_interval_ms; j += ',';
+    {
+        char field[64];
+        scroll_ack_format_sent_count_json(field, sizeof(field), scroll_ack_get_sent_count());
+        j += field; j += ',';
+    }
+    {
+        ScrollAckRuntime diag;
+        char field[512];
+        scroll_ack_get_diagnostics(&diag);
+        scroll_ack_format_diagnostics_json(field, sizeof(field), &diag);
+        j += field; j += ',';
+    }
     j += "\"track_rotation_pct\":";  j += (int)state.track_rotation_pct;   j += ',';
     j += "\"track_stability_pct\":"; j += (int)state.track_stability_pct;  j += ',';
     j += "\"track_post_cooling\":"; j += state.track_post_cooling        ? "true" : "false"; j += ',';
@@ -3203,13 +3261,47 @@ static WebCmdResult web_command(WebCmd &cmd, const uint8_t *payload, size_t leng
         bool enabled;
         if (cmd.boolean(&enabled)) {
             FSDState saved;
-            state_enter();
-            g_state->scroll_ack = enabled;
-            saved = *g_state;
-            state_exit();
+            scroll_ack_command_set_enabled(enabled, &saved);
             Serial.printf("[Web] DAS Scroll Ack: %s\n", enabled ? "ON" : "OFF");
             prefs_save(&saved);
             recompute_rx_filter();  // admit/drop 0x3C2 right away when whitelist is on
+        }
+    } else if (cmd.is("scroll_ack_mode")) {
+        // 0 = Prompt (one pair per hands-on prompt), 1 = Timer (TSL6, every 2-3 s).
+        int sel;
+        if (cmd.integer(&sel)) {
+            FSDState saved;
+            scroll_ack_command_set_mode(sel, &saved);
+            Serial.printf("[Web] Scroll Ack mode: %s\n",
+                          saved.scroll_ack_mode == SCROLL_ACK_MODE_TIMER ? "Timer" : "Prompt");
+            prefs_save(&saved);
+        }
+    } else if (cmd.is("scroll_ack_pattern") || cmd.is("scroll_ack_delay_ms") ||
+               cmd.is("scroll_ack_gap_ms") || cmd.is("scroll_ack_interval_ms")) {
+        // Scroll Ack tick pattern and timing means. The running episode keeps
+        // its drawn times; the next draw uses the new value.
+        int n;
+        bool ok;
+        if (cmd.is("scroll_ack_pattern")) {
+            ok = cmd.integer_capped(&n, 0, (int)SCROLL_ACK_PATTERN_DOWN_ONCE);
+        } else if (cmd.is("scroll_ack_delay_ms")) {
+            ok = cmd.integer_capped(&n, 0, (int)SCROLL_ACK_DELAY_MAX_MS);
+        } else if (cmd.is("scroll_ack_gap_ms")) {
+            ok = cmd.integer_capped(&n, 0, (int)SCROLL_ACK_GAP_MAX_MS);
+        } else {
+            ok = cmd.integer_capped(&n, (int)SCROLL_ACK_INTERVAL_MIN_MS, (int)SCROLL_ACK_INTERVAL_MAX_MS);
+        }
+        if (ok) {
+            FSDState saved;
+            state_enter();
+            if (cmd.is("scroll_ack_pattern"))        g_state->scroll_ack_pattern = (uint8_t)n;
+            else if (cmd.is("scroll_ack_delay_ms"))  g_state->scroll_ack_delay_ms = (uint16_t)n;
+            else if (cmd.is("scroll_ack_gap_ms"))    g_state->scroll_ack_gap_ms = (uint16_t)n;
+            else                                     g_state->scroll_ack_interval_ms = (uint16_t)n;
+            saved = *g_state;
+            state_exit();
+            Serial.printf("[Web] Scroll Ack setting: %d\n", n);
+            prefs_save(&saved);
         }
     } else if (cmd.is("track_rotation_pct")) {
         int n;
