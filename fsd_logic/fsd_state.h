@@ -31,6 +31,23 @@ typedef enum {
 #define ACCEL_MODE_SPORT       2u
 #define ACCEL_MODE_PERFORMANCE 3u
 
+// Scroll Ack trigger modes (FSDState.scroll_ack_mode).
+#define SCROLL_ACK_MODE_PROMPT 0u   // one pair per hands-on prompt (AP 6 + hands-on 3)
+#define SCROLL_ACK_MODE_TIMER  1u   // TSL6 pattern: one pair every 2-3 s while AP 6
+// Scroll Ack tick patterns (FSDState.scroll_ack_pattern). Left wheel = volume.
+#define SCROLL_ACK_PATTERN_DOWN_UP   0u  // -1 then +1 (default, TSL6)
+#define SCROLL_ACK_PATTERN_UP_DOWN   1u  // +1 then -1
+#define SCROLL_ACK_PATTERN_UP_ONCE   2u  // +1 only (volume goes up one step)
+#define SCROLL_ACK_PATTERN_DOWN_ONCE 3u  // -1 only (volume goes down one step)
+// Scroll Ack timing means in ms; each draw is random around the mean.
+#define SCROLL_ACK_DELAY_DEFAULT_MS    600u   // Prompt: prompt -> first tick
+#define SCROLL_ACK_DELAY_MAX_MS        5000u
+#define SCROLL_ACK_GAP_DEFAULT_MS      100u   // first tick -> second tick
+#define SCROLL_ACK_GAP_MAX_MS          2000u
+#define SCROLL_ACK_INTERVAL_DEFAULT_MS 2500u  // Timer: episode start to start
+#define SCROLL_ACK_INTERVAL_MIN_MS     1000u
+#define SCROLL_ACK_INTERVAL_MAX_MS     10000u
+
 typedef struct FSDState {
     TeslaHWVersion hw_version;
     // Manual HW selection (#110). TeslaHW_Unknown = auto-detect (default); any
@@ -199,11 +216,17 @@ typedef struct FSDState {
     uint32_t scroll_press_phase_ms;  // now_ms at the start of the current phase (timing reference)
 
     // --- DAS Scroll Ack (0x3C2 VCLEFT_switchStatus left ticks, HW4-only, ESP32) ---
-    // Opt-in. After fresh HW4 0x39B reports AP state 6 + hands-on state 3, emit
-    // one balanced left-scroll pair (-1 then +1) by copying the car's own idle
-    // page-1 0x3C2 frame. Primary channel only; one pair per state-3 episode.
+    // Opt-in. Emit left-scroll pairs (-1 then +1) by copying the car's own idle
+    // page-1 0x3C2 frame, only on a bus with no recent 0x370 (Vehicle CAN).
+    // scroll_ack_mode picks the trigger: Prompt = one pair when fresh HW4 0x39B
+    // reports AP state 6 + hands-on 3; Timer = one pair every 2-3 s while AP 6.
     // The episode runtime lives in main.cpp (ScrollAckRuntime), not here.
     bool scroll_ack;                 // master opt-in, default OFF
+    uint8_t scroll_ack_mode;         // SCROLL_ACK_MODE_PROMPT (default) / _TIMER
+    uint8_t scroll_ack_pattern;      // SCROLL_ACK_PATTERN_*, default DOWN_UP
+    uint16_t scroll_ack_delay_ms;    // Prompt delay mean, 0-5000
+    uint16_t scroll_ack_gap_ms;      // gap between the two ticks, mean, 0-2000
+    uint16_t scroll_ack_interval_ms; // Timer interval mean, 1000-10000
 
     // --- Configurable nag-context signal mapping (#122) ---
     // When cfg_das_id != 0, the RX path reads DAS_autopilotState + handsOnState

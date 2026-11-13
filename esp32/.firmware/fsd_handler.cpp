@@ -59,6 +59,11 @@ void fsd_state_init(FSDState *state, TeslaHWVersion hw) {
     state->assist_rhd_override  = false;    // opt-in RHD driving-side override, default OFF
     state->track_mode_inject    = false;    // Track Mode inject master opt-in, default OFF
     state->scroll_ack           = false;    // DAS Scroll Ack master opt-in, default OFF
+    state->scroll_ack_mode      = SCROLL_ACK_MODE_PROMPT;  // trigger on the hands-on prompt
+    state->scroll_ack_pattern   = SCROLL_ACK_PATTERN_DOWN_UP;
+    state->scroll_ack_delay_ms  = SCROLL_ACK_DELAY_DEFAULT_MS;
+    state->scroll_ack_gap_ms    = SCROLL_ACK_GAP_DEFAULT_MS;
+    state->scroll_ack_interval_ms = SCROLL_ACK_INTERVAL_DEFAULT_MS;
     state->track_rotation_pct   = 100;      // full rotation = rear-biased / RWD-like
     state->track_stability_pct  = 30;       // 30% keeps a safety margin but lets it move
     state->track_post_cooling   = false;

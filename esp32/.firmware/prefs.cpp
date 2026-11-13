@@ -49,6 +49,18 @@ void prefs_load(FSDState *state) {
     state->blackbox_enabled         = g_prefs.getBool("bbx",    BLACKBOX_DEFAULT_ENABLED);
     state->track_mode_inject        = g_prefs.getBool("tmInj",  false);
     state->scroll_ack               = g_prefs.getBool("scrAck", false);
+    state->scroll_ack_mode          = g_prefs.getUChar("scrMode", SCROLL_ACK_MODE_PROMPT);
+    if (state->scroll_ack_mode > SCROLL_ACK_MODE_TIMER) state->scroll_ack_mode = SCROLL_ACK_MODE_PROMPT;
+    state->scroll_ack_pattern       = g_prefs.getUChar("scrPat", SCROLL_ACK_PATTERN_DOWN_UP);
+    state->scroll_ack_delay_ms      = g_prefs.getUShort("scrDly", SCROLL_ACK_DELAY_DEFAULT_MS);
+    state->scroll_ack_gap_ms        = g_prefs.getUShort("scrGap", SCROLL_ACK_GAP_DEFAULT_MS);
+    state->scroll_ack_interval_ms   = g_prefs.getUShort("scrInt", SCROLL_ACK_INTERVAL_DEFAULT_MS);
+    if (state->scroll_ack_pattern > SCROLL_ACK_PATTERN_DOWN_ONCE) state->scroll_ack_pattern = SCROLL_ACK_PATTERN_DOWN_UP;
+    if (state->scroll_ack_delay_ms > SCROLL_ACK_DELAY_MAX_MS) state->scroll_ack_delay_ms = SCROLL_ACK_DELAY_DEFAULT_MS;
+    if (state->scroll_ack_gap_ms > SCROLL_ACK_GAP_MAX_MS) state->scroll_ack_gap_ms = SCROLL_ACK_GAP_DEFAULT_MS;
+    if (state->scroll_ack_interval_ms < SCROLL_ACK_INTERVAL_MIN_MS ||
+        state->scroll_ack_interval_ms > SCROLL_ACK_INTERVAL_MAX_MS)
+        state->scroll_ack_interval_ms = SCROLL_ACK_INTERVAL_DEFAULT_MS;
     state->track_rotation_pct       = g_prefs.getUChar("tmRot", 100);
     state->track_stability_pct      = g_prefs.getUChar("tmStab", 30);
     state->track_post_cooling       = g_prefs.getBool("tmPC",   false);
@@ -140,6 +152,11 @@ void prefs_save(const FSDState *state) {
     g_prefs.putBool("bbx",    state->blackbox_enabled);
     g_prefs.putBool("tmInj",  state->track_mode_inject);
     g_prefs.putBool("scrAck", state->scroll_ack);
+    g_prefs.putUChar("scrMode", state->scroll_ack_mode);
+    g_prefs.putUChar("scrPat", state->scroll_ack_pattern);
+    g_prefs.putUShort("scrDly", state->scroll_ack_delay_ms);
+    g_prefs.putUShort("scrGap", state->scroll_ack_gap_ms);
+    g_prefs.putUShort("scrInt", state->scroll_ack_interval_ms);
     g_prefs.putUChar("tmRot", state->track_rotation_pct);
     g_prefs.putUChar("tmStab",state->track_stability_pct);
     g_prefs.putBool("tmPC",   state->track_post_cooling);

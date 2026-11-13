@@ -267,9 +267,39 @@ static bool send_modified_frame(CanBusId bus, const CanFrame &frame) {
     return send_on_bus(bus, frame);
 }
 
-// DAS Scroll Ack episode state (0x3C2 left ticks). One instance per boot; the
-// handler in process_frame() owns it. Zero-initialised starts Armed.
+// DAS Scroll Ack episode state (0x3C2 left ticks). One instance per boot.
+// Access is protected by g_state_mux because the web task can reset it.
 static ScrollAckRuntime g_scroll_ack = {};
+
+
+// Web command bridge: update state and reset the episode under the same lock.
+void scroll_ack_command_set_enabled(bool enabled, FSDState *saved) {
+    state_enter();
+    scroll_ack_apply_enabled(&g_state, &g_scroll_ack, enabled);
+    if (saved) *saved = g_state;
+    state_exit();
+}
+
+// Web command bridge for the mode selector: same lock, same episode reset.
+void scroll_ack_command_set_mode(int mode, FSDState *saved) {
+    state_enter();
+    scroll_ack_apply_mode(&g_state, &g_scroll_ack, mode);
+    if (saved) *saved = g_state;
+    state_exit();
+}
+
+uint32_t scroll_ack_get_sent_count() {
+    state_enter();
+    uint32_t count = g_scroll_ack.sent_count;
+    state_exit();
+    return count;
+}
+
+void scroll_ack_get_diagnostics(ScrollAckRuntime *out) {
+    state_enter();
+    if (out) *out = g_scroll_ack;
+    state_exit();
+}
 
 // Last 0x229 counter per bus. A press goes out only on a bus fresh here.
 static GearCounterCache g_gear_counter[CAN_ACTIVE_BUS_COUNT] = {};
@@ -1319,6 +1349,8 @@ static NOINLINE void process_frame(CanBusId bus, const CanFrame &frame) {
     bool usable = tesla_can_rx_accept(frame.id, frame.ext != 0u, frame.req != 0u, frame.dlc);
     state_enter();
     g_state.rx_count++;
+    // Scroll Ack bus rule: a bus that carries 0x370 (EPAS) is not Vehicle CAN.
+    if (usable && frame.id == CAN_ID_EPAS_STATUS) scroll_ack_note_epas(&g_scroll_ack, bus, now);
     // Configurable signal mapping (#122): when set, read DAS/steering from the
     // user-configured positions and disable the auto-parsers for those signals.
     if (usable) fsd_apply_signal_config(&g_state, &frame, millis());
@@ -1453,9 +1485,11 @@ static NOINLINE void process_frame(CanBusId bus, const CanFrame &frame) {
         uint8_t ho = g_state.das_hands_on_state;
         state_exit();
         if (g_serial_debug) debug_log_das_status(bus, frame.id);
-        // DAS Scroll Ack: mark a fresh standard HW4 DAS source, primary channel
-        // only. A secondary gateway copy or a custom-mapped id must not stamp it.
-        if (bus == CAN_BUS_PRIMARY) scroll_ack_note_das39b(&g_scroll_ack, now);
+        // Scroll Ack: latch valid DAS from any bus, with receive time and
+        // the AP/hands-on values produced by this same successful parse.
+        state_enter();
+        scroll_ack_note_hw4_das(&g_scroll_ack, bus, frame, ap, ho);
+        state_exit();
         // Variant-profile auto-suggest (#126): feed the raw frame + what the std
         // parser made of it, so a stuck parser can be detected and matched.
         profile_match_record(frame, ap, ho, now);
@@ -1665,30 +1699,45 @@ static NOINLINE void process_frame(CanBusId bus, const CanFrame &frame) {
                  fsd_abort_guard_allows(&g_state);     // Abort Guard cuts injection on an abort (#108)
     state_exit();
 
-    // DAS Scroll Ack (0x3C2 left ticks, HW4-only) — copy the car's own idle
-    // page-1 frame and send one balanced -1/+1 left-scroll pair after fresh HW4
-    // 0x39B reports AP state 6 + hands-on state 3. Primary channel only; one pair
-    // per state-3 episode; follows native pacing, no timer. The state machine
-    // (scroll_ack.h) owns the episode; here we feed it a consistent snapshot.
+    // Scroll Ack (0x3C2 left ticks, HW4-only) — copy the car's own idle page-1
+    // frame and send a left -1/+1 pair: once per prompt (AP 6 + hands-on 3) in
+    // Prompt mode, or every 2-3 s while AP 6 in Timer mode. Only on a bus with
+    // no recent 0x370 (Vehicle CAN); each tick goes back on the bus it came from.
     if (frame.id == CAN_ID_VCLEFT_SWITCH) {
         ScrollAckInput in;
-        state_enter();
-        in.enabled     = g_state.scroll_ack;
-        in.tx_allowed  = tx && ap_ok;
-        in.primary_bus = (bus == CAN_BUS_PRIMARY);
-        in.fresh_native = fresh;
-        in.hw4         = (g_state.hw_version == TeslaHW_HW4);
-        in.ap_state    = g_state.das_ap_state;
-        in.hands_on    = g_state.das_hands_on_state;
-        state_exit();
         CanFrame out;
+        state_enter();
+        in.enabled      = g_state.scroll_ack;
+        if (!in.enabled) {
+            // Defensive cancellation when filtering still lets 0x3C2 through.
+            scroll_ack_reset_episode(&g_scroll_ack);
+            state_exit();
+            return;
+        }
+        in.tx_allowed   = tx && ap_ok;
+        in.bus          = bus;
+        in.mode         = g_state.scroll_ack_mode;
+        in.pattern      = g_state.scroll_ack_pattern;
+        in.delay_mean_ms    = g_state.scroll_ack_delay_ms;
+        in.gap_mean_ms      = g_state.scroll_ack_gap_ms;
+        in.interval_mean_ms = g_state.scroll_ack_interval_ms;
+        in.rand         = esp_random();
+        in.fresh_native = fresh;
+        in.hw4          = (g_state.hw_version == TeslaHW_HW4);
         ScrollAckAction act = scroll_ack_step(&g_scroll_ack, in, frame, now, &out);
+        uint32_t decision_generation = g_scroll_ack.episode_generation;
+        state_exit();
         if (act != ScrollAckAction::None) {
             bool sent = send_on_bus(bus, out);
-            scroll_ack_complete(&g_scroll_ack, act, sent);
+            state_enter();
+            scroll_ack_complete(&g_scroll_ack, act, sent,
+                                decision_generation, g_state.scroll_ack);
+            state_exit();
             if (sent) {
-                can_dump_log("SCRL 0x3C2 left tick %s TX",
-                             act == ScrollAckAction::FirstTick ? "-1" : "+1");
+                can_dump_log("SCRL 0x3C2 left tick %s (%s) TX %s",
+                             (out.data[2] & 0x3Fu) == 0x01u ? "+1" : "-1",
+                             act == ScrollAckAction::FirstTick ? "first" : "second",
+                             can_bus_name(bus));
             }
         }
         return;
