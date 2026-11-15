@@ -1,0 +1,32 @@
+menu "Scroll Ack BLE board"
+
+    choice SCRL_CAN_PINS
+        prompt "Grove pins for TWAI TX and RX"
+        default SCRL_CAN_PINS_UNCHECKED
+        help
+            The NanoH2 Grove port carries GPIO1 and GPIO2 to the Unit Mini CAN.
+            The M5Stack sources disagree on which one is CAN TX. A wrong choice
+            puts two outputs against each other.
+
+            Before the first power-up with the Grove cable, measure continuity
+            (nothing powered) from the NanoH2 Grove pins to TJA1051T/3 pin 1
+            (TXD) and pin 4 (RXD) on the Mini CAN. TWAI TX goes to TXD.
+
+            Until you choose, the firmware does not start the CAN controller
+            and leaves both pins as inputs.
+
+        config SCRL_CAN_PINS_UNCHECKED
+            bool "Not checked yet (CAN stays off)"
+        config SCRL_CAN_PINS_TX1_RX2
+            bool "TX = GPIO1, RX = GPIO2"
+        config SCRL_CAN_PINS_TX2_RX1
+            bool "TX = GPIO2, RX = GPIO1"
+    endchoice
+
+    config SCRL_CAN_BITRATE
+        int "CAN bit rate (bit/s)"
+        default 500000
+        help
+            Tesla Vehicle CAN runs at 500 kbit/s.
+
+endmenu

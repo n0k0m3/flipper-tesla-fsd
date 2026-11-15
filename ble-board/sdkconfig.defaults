@@ -1,0 +1,39 @@
+# M5Stack NanoH2: ESP32-H2FH4S, 4 MB flash.
+CONFIG_IDF_TARGET="esp32h2"
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
+# Two app slots. A new OTA image boots as "pending" and rolls back if the app
+# does not confirm it. Secure Boot stays off: it burns eFuses for good.
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+
+# Bench flash and logs go through the USB-C port (GPIO26/27).
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# 1 ms tick: the CAN task waits and the timers count in ms.
+CONFIG_FREERTOS_HZ=1000
+
+# The TWAI interrupt stamps the receive time. Let it run while the flash cache
+# is off (NVS write, OTA write), so a flash write cannot delay the stamp. Its
+# callbacks in scrl_can.cpp are in RAM and call only RAM and ROM code.
+CONFIG_TWAI_ISR_CACHE_SAFE=y
+
+# BLE: NimBLE, one phone at a time, peripheral only.
+CONFIG_BT_ENABLED=y
+CONFIG_BT_NIMBLE_ENABLED=y
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=517
+
+# The host task also writes NVS and the update image.
+CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192
+
+# LE Secure Connections only, with bonds kept in NVS. At most 2 bonds.
+CONFIG_BT_NIMBLE_SM_LEGACY=n
+CONFIG_BT_NIMBLE_SM_SC=y
+CONFIG_BT_NIMBLE_SM_SC_ONLY=1
+CONFIG_BT_NIMBLE_SM_LVL=4
+CONFIG_BT_NIMBLE_NVS_PERSIST=y
+CONFIG_BT_NIMBLE_MAX_BONDS=2
