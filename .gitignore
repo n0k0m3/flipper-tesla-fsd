@@ -24,5 +24,7 @@ test/test_power_log
 test/test_page_send
 test/test_rx_whitelist
 test/test_scroll_ack
+test/test_scrl_settings
+test/test_scrl_status
 *.dSYM/
 /.vs

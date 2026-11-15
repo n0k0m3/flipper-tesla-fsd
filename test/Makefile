@@ -10,6 +10,8 @@
 # test_power_log covers esp32/.firmware/power_log.h (reset reason refinement).
 # test_web_page.py covers esp32/gen_web_page.py (the gzip copy of the dashboard).
 # test_page_send covers esp32/.firmware/page_send.h (the page's send budget).
+# test_scrl_settings and test_scrl_status cover the BLE board (ble-board/main):
+# the settings codec, the status packers and the event log ring.
 #
 #   make -C test check
 
@@ -20,6 +22,7 @@ CXXFLAGS ?= -std=c++17 -Wall -Wextra -O0 -g
 ROOT    := ..
 ESP32   := $(ROOT)/esp32/.firmware
 SRC     := test_fsd_core.c $(ROOT)/fsd_logic/fsd_handler.c $(ROOT)/fsd_logic/fsd_profile.c $(ROOT)/fsd_logic/fsd_power.c
+BLEBOARD := $(ROOT)/ble-board/main
 ESP32_SRC := test_esp32_core.cpp $(ESP32)/fsd_handler.cpp
 
 test_fsd_core: $(SRC) $(ROOT)/fsd_logic/fsd_handler.h $(ROOT)/fsd_logic/fsd_types.h $(ROOT)/fsd_logic/fsd_checksum.h $(ROOT)/fsd_logic/fsd_can_ops.h $(ROOT)/fsd_logic/fsd_perf.h $(ROOT)/fsd_logic/fsd_state.h $(ROOT)/fsd_logic/fsd_capture.h $(ROOT)/fsd_logic/fsd_profile.h $(ROOT)/fsd_logic/fsd_events.h $(ROOT)/fsd_logic/fsd_blackbox_summary.h $(ROOT)/fsd_logic/fsd_blackbox_filter.h $(ROOT)/fsd_logic/fsd_capability.h $(ROOT)/fsd_logic/fsd_profile_db.h $(ROOT)/fsd_logic/fsd_ota.h $(ROOT)/fsd_logic/fsd_autopark.h $(ROOT)/fsd_logic/fsd_tpms.h $(ROOT)/fsd_logic/fsd_power.h $(ROOT)/fsd_logic/fsd_steer.h $(ROOT)/fsd_logic/fsd_bms.h $(ROOT)/fsd_logic/fsd_freshness.h
@@ -67,7 +70,18 @@ test_rx_whitelist: test_rx_whitelist.c $(ROOT)/fsd_logic/fsd_rx_whitelist.h $(RO
 test_scroll_ack: test_scroll_ack.cpp $(ESP32)/scroll_ack.h $(ESP32)/can_driver.h $(ESP32)/fsd_handler.h $(ESP32)/config.h $(ROOT)/fsd_logic/fsd_types.h $(ROOT)/fsd_logic/fsd_state.h
 	$(CXX) $(CXXFLAGS) -I$(ESP32) -I$(ROOT)/fsd_logic test_scroll_ack.cpp -o $@
 
-check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe test_can_mcp2518fd test_web_cmd test_web_origin test_can_counters test_loop_health test_power_log test_page_send test_rx_whitelist test_scroll_ack
+# The BLE board (ble-board/, ESP32-H2) keeps its settings codec and its status
+# packers in ESP-IDF-free headers. They include scroll_ack.h, so the include
+# path is the same as for test_scroll_ack.
+SCRL_DEPS := $(ESP32)/scroll_ack.h $(ESP32)/can_driver.h $(ESP32)/fsd_handler.h $(ESP32)/config.h $(ROOT)/fsd_logic/fsd_types.h $(ROOT)/fsd_logic/fsd_state.h
+
+test_scrl_settings: test_scrl_settings.cpp $(BLEBOARD)/scrl_settings.h $(SCRL_DEPS)
+	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) -I$(ESP32) -I$(ROOT)/fsd_logic test_scrl_settings.cpp -o $@
+
+test_scrl_status: test_scrl_status.cpp $(BLEBOARD)/scrl_status.h $(BLEBOARD)/scrl_log.h $(SCRL_DEPS)
+	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) -I$(ESP32) -I$(ROOT)/fsd_logic test_scrl_status.cpp -o $@
+
+check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe test_can_mcp2518fd test_web_cmd test_web_origin test_can_counters test_loop_health test_power_log test_page_send test_rx_whitelist test_scroll_ack test_scrl_settings test_scrl_status
 	./test_fsd_core
 	./test_esp32_core
 	./test_can_capture_filter
@@ -81,9 +95,11 @@ check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe 
 	./test_page_send
 	./test_rx_whitelist
 	./test_scroll_ack
+	./test_scrl_settings
+	./test_scrl_status
 	CXX="$(CXX)" python3 test_web_page.py
 
 clean:
-	rm -rf test_fsd_core test_fsd_core.dSYM test_esp32_core test_esp32_core.dSYM test_can_capture_filter test_can_capture_filter.dSYM test_captive_probe test_captive_probe.dSYM test_can_mcp2518fd test_can_mcp2518fd.dSYM test_web_cmd test_web_cmd.dSYM test_web_origin test_web_origin.dSYM test_can_counters test_can_counters.dSYM test_loop_health test_loop_health.dSYM test_power_log test_power_log.dSYM test_page_send test_page_send.dSYM test_rx_whitelist test_rx_whitelist.dSYM test_scroll_ack test_scroll_ack.dSYM
+	rm -rf test_fsd_core test_fsd_core.dSYM test_esp32_core test_esp32_core.dSYM test_can_capture_filter test_can_capture_filter.dSYM test_captive_probe test_captive_probe.dSYM test_can_mcp2518fd test_can_mcp2518fd.dSYM test_web_cmd test_web_cmd.dSYM test_web_origin test_web_origin.dSYM test_can_counters test_can_counters.dSYM test_loop_health test_loop_health.dSYM test_power_log test_power_log.dSYM test_page_send test_page_send.dSYM test_rx_whitelist test_rx_whitelist.dSYM test_scroll_ack test_scroll_ack.dSYM test_scrl_settings test_scrl_settings.dSYM test_scrl_status test_scrl_status.dSYM
 
 .PHONY: check clean
