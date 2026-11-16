@@ -24,4 +24,7 @@ void scrl_app_request_reboot(uint32_t delay_ms);
 /** Erase the settings, the counters and the bonds, then restart. The passkey stays. */
 void scrl_app_factory_reset(void);
 
+/** Save a new BLE passkey (0 to 999999). Returns false when the save fails. */
+bool scrl_app_set_passkey(uint32_t passkey);
+
 const ScrlBootInfo *scrl_app_boot_info(void);

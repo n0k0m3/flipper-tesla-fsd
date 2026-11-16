@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "scrl_passkey.h"
 #include "scrl_settings.h"
 
 static int g_pass = 0;
@@ -169,6 +170,28 @@ static void test_op_mode_named(void) {
               !named, "a refused write names nothing");
 }
 
+static bool passkey(const char *text, uint32_t *out) {
+    return scrl_passkey_from_digits((const uint8_t *)text, strlen(text), out);
+}
+
+static void test_passkey_digits(void) {
+    uint32_t v = 77;
+    CHECK(passkey("123456", &v) && v == 123456u, "six digits");
+    CHECK(passkey("000000", &v) && v == 0u, "all zeros is a passkey");
+    CHECK(passkey("000042", &v) && v == 42u, "leading zeros count as digits");
+    CHECK(passkey("999999", &v) && v == SCRL_PASSKEY_MAX, "largest passkey");
+    v = 77;
+    const char *bad[] = {"", "12345", "1234567", "12345a", " 23456", "12 456", "-12345", "12345\n", "1.2345"};
+    for (const char *text : bad) {
+        CHECK(!passkey(text, &v), "'%s' is not a passkey", text);
+        CHECK(v == 77u, "'%s' must not change the output", text);
+    }
+    // The reader takes a length. Digits after it are not read.
+    CHECK(scrl_passkey_from_digits((const uint8_t *)"1234567", 6, &v) && v == 123456u, "only len bytes are read");
+    const uint8_t with_nul[6] = {'1', '2', '3', 0, '5', '6'};
+    CHECK(!scrl_passkey_from_digits(with_nul, sizeof(with_nul), &v), "a zero byte is not a digit");
+}
+
 static void test_to_state(void) {
     ScrlSettings s = scrl_settings_defaults();
     s.enabled = true;
@@ -197,6 +220,7 @@ int main(void) {
     test_clamp();
     test_rejects();
     test_op_mode_named();
+    test_passkey_digits();
     test_to_state();
     printf("\n%d passed, %d failed\n", g_pass, g_fail);
     return g_fail == 0 ? 0 : 1;

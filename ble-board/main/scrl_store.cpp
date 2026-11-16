@@ -131,6 +131,14 @@ ScrlBootInfo scrl_store_boot(void) {
     return info;
 }
 
+bool scrl_store_set_passkey(uint32_t passkey) {
+    if (!s_open || passkey > 999999u) return false;
+    esp_err_t err = nvs_set_u32(s_nvs, "passkey", passkey);
+    if (err == ESP_OK) err = nvs_commit(s_nvs);
+    if (err != ESP_OK) ESP_LOGE(TAG, "passkey save failed: %s", esp_err_to_name(err));
+    return err == ESP_OK;
+}
+
 void scrl_store_factory_reset(void) {
     if (!s_open) return;
     // Erase key by key, and never touch "passkey". The passkey is on the label

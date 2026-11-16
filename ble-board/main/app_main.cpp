@@ -93,6 +93,14 @@ void scrl_app_factory_reset(void) {
     scrl_app_request_reboot(500);
 }
 
+bool scrl_app_set_passkey(uint32_t passkey) {
+    if (!scrl_store_set_passkey(passkey)) return false;
+    s_boot.passkey = passkey;
+    // USB console only, like the line at boot.
+    ESP_LOGI(TAG, "BLE passkey changed: %06u", (unsigned)passkey);
+    return true;
+}
+
 const ScrlBootInfo *scrl_app_boot_info(void) {
     return &s_boot;
 }

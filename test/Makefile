@@ -75,7 +75,7 @@ test_scroll_ack: test_scroll_ack.cpp $(ESP32)/scroll_ack.h $(ESP32)/can_driver.h
 # path is the same as for test_scroll_ack.
 SCRL_DEPS := $(ESP32)/scroll_ack.h $(ESP32)/can_driver.h $(ESP32)/fsd_handler.h $(ESP32)/config.h $(ROOT)/fsd_logic/fsd_types.h $(ROOT)/fsd_logic/fsd_state.h
 
-test_scrl_settings: test_scrl_settings.cpp $(BLEBOARD)/scrl_settings.h $(SCRL_DEPS)
+test_scrl_settings: test_scrl_settings.cpp $(BLEBOARD)/scrl_settings.h $(BLEBOARD)/scrl_passkey.h $(SCRL_DEPS)
 	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) -I$(ESP32) -I$(ROOT)/fsd_logic test_scrl_settings.cpp -o $@
 
 test_scrl_status: test_scrl_status.cpp $(BLEBOARD)/scrl_status.h $(BLEBOARD)/scrl_log.h $(SCRL_DEPS)

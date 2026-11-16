@@ -28,6 +28,7 @@
 #include "scrl_logbuf.h"
 #include "scrl_log.h"
 #include "scrl_ota.h"
+#include "scrl_passkey.h"
 #include "scrl_proc.h"
 #include "scrl_settings.h"
 #include "scrl_status.h"
@@ -196,6 +197,19 @@ static int write_settings(const uint8_t *data, size_t len) {
 }
 
 static int write_command(const uint8_t *data, size_t len) {
+    if (len < 1u) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+    if (data[0] == SCRL_CMD_SET_PASSKEY) {
+        uint32_t passkey = 0;
+        if (!scrl_passkey_from_digits(&data[1], len - 1u, &passkey)) {
+            return BLE_ATT_ERR_VALUE_NOT_ALLOWED;
+        }
+        // Save first. If the save fails, the old passkey stays in use, so the
+        // board and its label cannot differ after the next start.
+        if (!scrl_app_set_passkey(passkey)) return BLE_ATT_ERR_UNLIKELY;
+        s_passkey = passkey;  // for the next pairing; the bonds do not change
+        scrl_log("CMD  passkey changed");  // never the digits: the log goes out over BLE
+        return 0;
+    }
     if (len != 1u) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     switch (data[0]) {
     case SCRL_CMD_RESET_COUNTERS:

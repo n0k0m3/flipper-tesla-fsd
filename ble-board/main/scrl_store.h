@@ -6,6 +6,8 @@
  *   scrAck (u8), scrMode (u8), scrPat (u8), scrDly (u16), scrGap (u16), scrInt (u16)
  * Added for this board:
  *   opMode (u8), pwrOnCnt (u32), rstLog (4 bytes, newest first), passkey (u32)
+ * The passkey is made at the first boot. A factory reset keeps it. Only the
+ * owner changes it, with scrl_store_set_passkey().
  * NimBLE keeps the bonds in its own namespace.
  */
 
@@ -34,6 +36,9 @@ void scrl_store_save_settings(const ScrlSettings &settings);
 
 /** Record this boot (reset log, power-on count) and load or create the passkey. */
 ScrlBootInfo scrl_store_boot(void);
+
+/** Save a new passkey (0 to 999999). Returns false when NVS is not usable or the write fails. */
+bool scrl_store_set_passkey(uint32_t passkey);
 
 /** Erase the settings and the counters. The passkey stays: it is on the label of the board. */
 void scrl_store_factory_reset(void);

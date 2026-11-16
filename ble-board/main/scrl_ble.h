@@ -8,7 +8,7 @@
  *   0003  Status       read                  JSON, see scrl_status.h
  *   0004  Live         read, notify (1 Hz)   19 bytes, see scrl_status.h
  *   0005  Settings     read, write           JSON, see scrl_settings.h
- *   0006  Command      write                 one byte, SCRL_CMD_*
+ *   0006  Command      write                 one byte, SCRL_CMD_*. SET_PASSKEY adds 6 ASCII digits
  *   0007  Log          notify                event lines, the last 64 on subscribe
  *   0008  OTA control  write, notify         see scrl_ota.h
  *   0009  OTA data     write without response
@@ -19,6 +19,8 @@
  *   - LE Secure Connections only, with bonding. The board shows nothing, so the
  *     passkey is static: 6 digits, made at first boot, kept in NVS, printed on
  *     the USB console for the label on the board. A factory reset keeps it.
+ *   - A paired phone can set a new passkey (SCRL_CMD_SET_PASSKEY). The passkey
+ *     counts only for a new pairing: the phones that are paired stay paired.
  *   - The board accepts a new bond only in the first 5 minutes after power-on,
  *     or for 2 minutes after a press of the button. A restart without a power
  *     cycle does not open the window, except when the board has no bond at all.
@@ -40,6 +42,7 @@
 #define SCRL_CMD_FORGET_BONDS   0x03u
 #define SCRL_CMD_FACTORY_RESET  0x04u
 #define SCRL_CMD_CONFIRM_IMAGE  0x05u  // makes a new image permanent, see scrl_ota.h
+#define SCRL_CMD_SET_PASSKEY    0x06u  // followed by 6 ASCII digits, see scrl_passkey.h
 
 #define SCRL_BLE_PAIR_WINDOW_BOOT_MS   (5u * 60u * 1000u)
 #define SCRL_BLE_PAIR_WINDOW_BUTTON_MS (2u * 60u * 1000u)
