@@ -237,18 +237,39 @@ static int write_command(const uint8_t *data, size_t len) {
     }
 }
 
+static const char *const CHR_NAMES[] = {"info", "status", "live", "settings", "command", "log", "ota_ctrl", "ota_data"};
+
+static int access_read(ChrId id, struct ble_gatt_access_ctxt *ctxt) {
+    switch (id) {
+    case CHR_INFO: return read_info(ctxt->om);
+    case CHR_STATUS: return read_status(ctxt->om, ctxt->offset);
+    case CHR_LIVE: return read_live(ctxt->om);
+    case CHR_SETTINGS: return read_settings(ctxt->om);
+    default: return BLE_ATT_ERR_READ_NOT_PERMITTED;
+    }
+}
+
+static int access_write(uint16_t conn, ChrId id, struct ble_gatt_access_ctxt *ctxt);
+
+// Every GATT read and write gives one line on the USB console (not in the BLE
+// log): the phone side of a failed connect does not show what reached the board.
 static int access_cb(uint16_t conn, uint16_t, struct ble_gatt_access_ctxt *ctxt, void *arg) {
     ChrId id = (ChrId)(intptr_t)arg;
-
+    const char *name = (unsigned)id < sizeof(CHR_NAMES) / sizeof(CHR_NAMES[0]) ? CHR_NAMES[id] : "?";
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
-        switch (id) {
-        case CHR_INFO: return read_info(ctxt->om);
-        case CHR_STATUS: return read_status(ctxt->om, ctxt->offset);
-        case CHR_LIVE: return read_live(ctxt->om);
-        case CHR_SETTINGS: return read_settings(ctxt->om);
-        default: return BLE_ATT_ERR_READ_NOT_PERMITTED;
-        }
+        int rc = access_read(id, ctxt);
+        ESP_LOGI(TAG, "GATT read %s offset %u: rc %d, %u bytes", name, (unsigned)ctxt->offset, rc,
+                 (unsigned)OS_MBUF_PKTLEN(ctxt->om));
+        return rc;
     }
+    unsigned len = ctxt->om ? (unsigned)OS_MBUF_PKTLEN(ctxt->om) : 0u;
+    int rc = access_write(conn, id, ctxt);
+    // ota_data comes thousands of times per update: log only a refused write.
+    if (id != CHR_OTA_DATA || rc != 0) ESP_LOGI(TAG, "GATT write %s, %u bytes: rc %d", name, len, rc);
+    return rc;
+}
+
+static int access_write(uint16_t conn, ChrId id, struct ble_gatt_access_ctxt *ctxt) {
     if (ctxt->op != BLE_GATT_ACCESS_OP_WRITE_CHR) return BLE_ATT_ERR_UNLIKELY;
 
     // The stack already checked encryption and authentication from the flags.
@@ -346,6 +367,7 @@ static int gap_event(struct ble_gap_event *event, void *) {
         return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
+        ESP_LOGI(TAG, "GAP encryption change, status %d", event->enc_change.status);
         if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) != 0) return 0;
         if (event->enc_change.status == 0 && desc.sec_state.encrypted &&
             desc.sec_state.authenticated) {
@@ -386,8 +408,18 @@ static int gap_event(struct ble_gap_event *event, void *) {
         }
         return BLE_GAP_REPEAT_PAIRING_RETRY;
 
+    case BLE_GAP_EVENT_MTU:
+        ESP_LOGI(TAG, "GAP MTU %u", (unsigned)event->mtu.value);
+        return 0;
+
+    case BLE_GAP_EVENT_CONN_UPDATE:
+        ESP_LOGI(TAG, "GAP connection update, status %d", event->conn_update.status);
+        return 0;
+
     case BLE_GAP_EVENT_SUBSCRIBE: {
         bool on = event->subscribe.cur_notify != 0;
+        ESP_LOGI(TAG, "GAP subscribe handle %u notify %u reason %u", (unsigned)event->subscribe.attr_handle,
+                 (unsigned)event->subscribe.cur_notify, (unsigned)event->subscribe.reason);
         if (event->subscribe.attr_handle == s_h_live) {
             s_sub_live.store(on);
         } else if (event->subscribe.attr_handle == s_h_log) {
