@@ -13,6 +13,7 @@
 
 #include "esp_app_desc.h"
 #include "esp_bt.h"
+#include "esp_debug_helpers.h"
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "host/ble_hs.h"
@@ -558,9 +559,13 @@ void scrl_ble_init(uint32_t passkey, bool power_on) {
 static struct ble_npl_event s_beat_ev;
 static bool s_beat_init;
 static uint32_t s_beat_last_ms;
+static uint32_t s_beat_stalls;   // heartbeats in a row that still waited
+static bool s_beat_dumped;       // backtraces printed for this stall
 
 static void host_beat(struct ble_npl_event *) {
     struct ble_gap_conn_desc desc;
+    s_beat_stalls = 0;
+    s_beat_dumped = false;
     uint16_t conn = s_conn.load();
     if (conn == BLE_HS_CONN_HANDLE_NONE || ble_gap_conn_find(conn, &desc) != 0) {
         ESP_LOGI(TAG, "host alive, no link");
@@ -581,7 +586,15 @@ static void host_beat_tick(uint32_t now) {
     if ((uint32_t)(now - s_beat_last_ms) < HOST_BEAT_MS) return;
     s_beat_last_ms = now;
     if (ble_npl_event_is_queued(&s_beat_ev)) {
-        ESP_LOGW(TAG, "host task did not run the last heartbeat in %u ms", (unsigned)HOST_BEAT_MS);
+        s_beat_stalls++;
+        ESP_LOGW(TAG, "host task did not run the last heartbeat in %u ms", (unsigned)(s_beat_stalls * HOST_BEAT_MS));
+        // Two stalls in a row: print where every task is, one time per stall.
+        // Decode with: xtensa-esp32s3-elf-addr2line -pfiaC -e scrl-ble-board.elf <addresses>
+        if (s_beat_stalls >= 2u && !s_beat_dumped) {
+            s_beat_dumped = true;
+            ESP_LOGW(TAG, "backtrace of all tasks:");
+            esp_backtrace_print_all_tasks(24);
+        }
         return;
     }
     ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &s_beat_ev);
