@@ -26,5 +26,6 @@ test/test_rx_whitelist
 test/test_scroll_ack
 test/test_scrl_settings
 test/test_scrl_status
+test/scrl_vectors
 *.dSYM/
 /.vs
