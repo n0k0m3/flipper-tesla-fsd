@@ -592,8 +592,13 @@ static void host_beat_tick(uint32_t now) {
         // Decode with: xtensa-esp32s3-elf-addr2line -pfiaC -e scrl-ble-board.elf <addresses>
         if (s_beat_stalls >= 2u && !s_beat_dumped) {
             s_beat_dumped = true;
+#if CONFIG_IDF_TARGET_ARCH_XTENSA
             ESP_LOGW(TAG, "backtrace of all tasks:");
             esp_backtrace_print_all_tasks(24);
+#else
+            // RISC-V (ESP32-H2): the IDF has no all-task backtrace there.
+            ESP_LOGW(TAG, "host task stalled; no all-task backtrace on this chip");
+#endif
         }
         return;
     }
