@@ -18,7 +18,7 @@
  * SECURITY
  *   - LE Secure Connections only, with bonding. The board shows nothing, so the
  *     passkey is static: 6 digits, made at first boot, kept in NVS, printed on
- *     the USB console for the label on the board.
+ *     the USB console for the label on the board. A factory reset keeps it.
  *   - The board accepts a new bond only in the first 5 minutes after power-on,
  *     or for 2 minutes after a press of the button. A restart without a power
  *     cycle does not open the window, except when the board has no bond at all.

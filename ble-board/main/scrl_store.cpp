@@ -133,7 +133,17 @@ ScrlBootInfo scrl_store_boot(void) {
 
 void scrl_store_factory_reset(void) {
     if (!s_open) return;
-    nvs_erase_all(s_nvs);
+    // Erase key by key, and never touch "passkey". The passkey is on the label
+    // of the board. A new one would show only on the USB console, and in the
+    // car that locks the owner out of the board.
+    static const char *const keys[] = {"scrAck", "scrMode", "scrPat", "scrDly", "scrGap",
+                                       "scrInt", "opMode", "pwrOnCnt", "rstLog"};
+    for (const char *key : keys) {
+        esp_err_t err = nvs_erase_key(s_nvs, key);
+        if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {
+            ESP_LOGE(TAG, "erase %s failed: %s", key, esp_err_to_name(err));
+        }
+    }
     nvs_commit(s_nvs);
     s_saved_valid = false;
 }

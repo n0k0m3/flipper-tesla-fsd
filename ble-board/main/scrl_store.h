@@ -35,5 +35,5 @@ void scrl_store_save_settings(const ScrlSettings &settings);
 /** Record this boot (reset log, power-on count) and load or create the passkey. */
 ScrlBootInfo scrl_store_boot(void);
 
-/** Erase the settings, the counters and the passkey. The next boot makes a new passkey. */
+/** Erase the settings and the counters. The passkey stays: it is on the label of the board. */
 void scrl_store_factory_reset(void);
