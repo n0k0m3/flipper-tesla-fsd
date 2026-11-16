@@ -7,6 +7,7 @@ set(LOGIC_DIR "${CMAKE_CURRENT_LIST_DIR}/../../fsd_logic")
 set(srcs
     "app_main.cpp"
     "scrl_ble.cpp"
+    "scrl_board_desc.cpp"
     "scrl_can.cpp"
     "scrl_logbuf.cpp"
     "scrl_ota.cpp"

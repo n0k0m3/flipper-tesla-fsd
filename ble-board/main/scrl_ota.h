@@ -8,7 +8,8 @@
  *      response. It never sends more than SCRL_OTA_WINDOW bytes past the last
  *      CREDIT offset.
  *   3. Phone writes END. The board checks the size, the SHA-256 and the image
- *      (magic, chip ID, checksum), selects the new slot, and restarts.
+ *      (magic, chip ID, checksum, board ID in scrl_board_desc.h), selects the
+ *      new slot, and restarts.
  *   4. The new image boots as "pending". It stays in Listen-Only.
  *   5. An authenticated phone reconnects and writes the confirm command. Only
  *      then the image is valid. With no confirm in SCRL_OTA_CONFIRM_MS the board
@@ -46,7 +47,7 @@
 #define SCRL_OTA_ERR_SIZE        0x04u  // image does not fit, or the byte count is wrong
 #define SCRL_OTA_ERR_FLASH       0x05u  // flash write or erase failed
 #define SCRL_OTA_ERR_SHA         0x06u  // SHA-256 does not match
-#define SCRL_OTA_ERR_IMAGE       0x07u  // not a valid ESP32-H2 app image
+#define SCRL_OTA_ERR_IMAGE       0x07u  // not a valid app image for this chip and board
 #define SCRL_OTA_ERR_TIMEOUT     0x08u  // no data for SCRL_OTA_IDLE_MS
 #define SCRL_OTA_ERR_LINK        0x09u  // the phone disconnected
 #define SCRL_OTA_ERR_ABORTED     0x0Au  // the phone sent ABORT

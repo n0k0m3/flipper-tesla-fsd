@@ -12,11 +12,13 @@
 #include "esp_app_format.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_partition.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "mbedtls/sha256.h"
 
 #include "scrl_board.h"
+#include "scrl_board_desc.h"
 #include "scrl_logbuf.h"
 #include "scrl_proc.h"
 
@@ -49,6 +51,16 @@ static void fill_event(uint8_t *event, uint8_t evt, uint8_t status) {
     event[3] = (uint8_t)((s_received >> 8) & 0xFFu);
     event[4] = (uint8_t)((s_received >> 16) & 0xFFu);
     event[5] = (uint8_t)(s_received >> 24);
+}
+
+// True when the board descriptor of a new image names this board. Logs a refusal.
+static bool board_ok(const ScrlBoardDesc &desc) {
+    if (scrl_board_desc_match(desc, scrl_board_desc)) return true;
+    char name[sizeof(desc.board) + 1] = {};
+    if (desc.magic == SCRL_BOARD_DESC_MAGIC) memcpy(name, desc.board, sizeof(desc.board));
+    scrl_log("UPD  image is for board \"%s\", this is \"%s\"", name[0] ? name : "?",
+             scrl_board_desc.board);
+    return false;
 }
 
 // Stop a running update and leave the old image selected.
@@ -152,6 +164,14 @@ static uint8_t end_update(void) {
     s_active = false;  // the handle is gone after esp_ota_end, good or bad
     // esp_ota_end checks the image: magic, chip ID, segment checksum, hash.
     esp_err_t err = esp_ota_end(s_handle);
+    if (err == ESP_OK) {
+        // Same chip is not enough: the image must name this board.
+        ScrlBoardDesc desc;
+        if (esp_partition_read(s_target, SCRL_BOARD_DESC_OFFSET, &desc, sizeof(desc)) != ESP_OK ||
+            !board_ok(desc)) {
+            err = ESP_ERR_OTA_VALIDATE_FAILED;
+        }
+    }
     if (err == ESP_OK) err = esp_ota_set_boot_partition(s_target);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "image rejected: %s", esp_err_to_name(err));
@@ -200,7 +220,16 @@ bool scrl_ota_data(const uint8_t *data, size_t len, uint8_t *event) {
             status = SCRL_OTA_ERR_IMAGE;
         } else if (len >= sizeof(header)) {
             memcpy(&header, data, sizeof(header));
-            if (header.chip_id != ESP_CHIP_ID_ESP32H2) status = SCRL_OTA_ERR_IMAGE;
+            if (header.chip_id != (esp_chip_id_t)CONFIG_IDF_FIRMWARE_CHIP_ID) {
+                status = SCRL_OTA_ERR_IMAGE;
+            }
+        }
+        // The board descriptor too, when this first write holds it. end_update()
+        // checks it again from flash in every case.
+        if (status == SCRL_OTA_OK && len >= SCRL_BOARD_DESC_OFFSET + sizeof(ScrlBoardDesc)) {
+            ScrlBoardDesc desc;
+            memcpy(&desc, &data[SCRL_BOARD_DESC_OFFSET], sizeof(desc));
+            if (!board_ok(desc)) status = SCRL_OTA_ERR_IMAGE;
         }
     }
     if (status == SCRL_OTA_OK && esp_ota_write(s_handle, data, len) != ESP_OK) {
