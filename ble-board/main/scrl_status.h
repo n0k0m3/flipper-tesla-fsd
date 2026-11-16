@@ -15,7 +15,7 @@
  *    "pwr":N,             power-on count
  *    "up":N,              uptime, seconds
  *    "rxpin":N}           GPIO that receives CAN, -1 = controller off
- * Feed voltage and board current are not in it: the NanoH2 has no free ADC pin.
+ * Feed voltage and board current are not in it: no board build measures them.
  *
  * LIVE RECORD (little-endian):
  *   0  phase            ScrollAckPhase
@@ -27,8 +27,8 @@
  *   9  pairs aborted    u16, stops at 65535
  *   11 native age, ms   u16, stops at 65535
  *   13 DAS age, ms      u16, stops at 65535
- *   15 feed, mV         u16, 0 on the M5Stack build
- *   17 board current    u16, 0 on the M5Stack build
+ *   15 feed, mV         u16, always 0: no board build measures it
+ *   17 board current    u16, always 0: no board build measures it
  */
 
 #include <stdbool.h>
@@ -128,6 +128,6 @@ static inline void scrl_live_pack(const ScrlStatus &st, uint8_t *out) {
     scrl_put_u16(&out[9], st.scroll.pairs_aborted);
     scrl_put_u16(&out[11], st.scroll.last_native_age_ms);
     scrl_put_u16(&out[13], st.scroll.last_das_age_ms);
-    scrl_put_u16(&out[15], 0u);  // feed mV: no ADC pin on the NanoH2
-    scrl_put_u16(&out[17], 0u);  // board current: no ADC pin on the NanoH2
+    scrl_put_u16(&out[15], 0u);  // feed mV: not measured
+    scrl_put_u16(&out[17], 0u);  // board current: not measured
 }

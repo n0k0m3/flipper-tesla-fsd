@@ -141,12 +141,13 @@ static int read_info(struct os_mbuf *om) {
     esp_read_mac(mac, ESP_MAC_BT);
     char sha[9];
     esp_app_get_elf_sha256(sha, sizeof(sha));
-    char json[256];
+    char json[320];
     int n = snprintf(json, sizeof(json),
                      "{\"fw\":\"%s\",\"build\":\"%s\",\"built\":\"%s %s\",\"idf\":\"%s\","
-                     "\"board\":\"nanoh2-minican\",\"chip\":\"esp32h2\","
+                     "\"board\":\"%s\",\"chip\":\"%s\",\"can\":\"%s\","
                      "\"id\":\"%02x%02x%02x%02x%02x%02x\",\"rst_log\":[%u,%u,%u,%u]}",
                      app->version, sha, app->date, app->time, app->idf_ver,
+                     CONFIG_SCRL_BOARD_ID, CONFIG_IDF_TARGET, SCRL_CAN_KIND,
                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                      (unsigned)boot->reset_log[0], (unsigned)boot->reset_log[1],
                      (unsigned)boot->reset_log[2], (unsigned)boot->reset_log[3]);

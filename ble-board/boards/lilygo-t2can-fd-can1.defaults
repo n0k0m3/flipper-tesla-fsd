@@ -1,0 +1,4 @@
+# lilygo-t2can-fd-can1: see main/Kconfig.projbuild and main/scrl_board.h.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_SCRL_BOARD_LILYGO_T2CAN_FD=y
+CONFIG_SCRL_T2CAN_BUS_CAN1=y

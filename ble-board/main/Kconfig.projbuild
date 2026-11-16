@@ -1,7 +1,91 @@
 menu "Scroll Ack BLE board"
 
+    # One entry per board. The names and the pins come from the hypery
+    # PlatformIO envs (esp32/platformio.ini, esp32/.firmware/config.h), plus
+    # the NanoH2. boards/<id>.defaults picks one; tools/build-boards.sh builds
+    # them all.
+    choice SCRL_BOARD
+        prompt "Board"
+        default SCRL_BOARD_NANOH2 if IDF_TARGET_ESP32H2
+        default SCRL_BOARD_LILYGO_T2CAN if IDF_TARGET_ESP32S3
+        default SCRL_BOARD_ESP32_GENERIC_TWAI
+
+        config SCRL_BOARD_NANOH2
+            bool "M5Stack NanoH2 + Unit Mini CAN"
+            depends on IDF_TARGET_ESP32H2
+        config SCRL_BOARD_M5STACK_ATOM
+            bool "M5Stack ATOM Lite + ATOMIC CAN Base"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_M5STACK_ATOM_MATRIX
+            bool "M5Stack ATOM Matrix + ATOMIC CAN Base"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_M5STACK_ATOM_SWAP_PINS
+            bool "M5Stack ATOM Lite + ATOMIC CAN Base, TX and RX swapped"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_ESP32_GENERIC_TWAI
+            bool "Classic ESP32 DevKit + SN65HVD230"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_ESP32_GENERIC_TWAI_SNIFFER
+            bool "Classic ESP32 DevKit + SN65HVD230, never transmits"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_ESP32_MCP2515
+            bool "Generic ESP32 + MCP2515 module"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_ESP32_LILYGO
+            bool "LilyGO T-CAN485"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_TTGO_TDISPLAY
+            bool "TTGO T-Display + MCP2515"
+            depends on IDF_TARGET_ESP32
+        config SCRL_BOARD_LILYGO_T2CAN
+            bool "LilyGO T-2CAN"
+            depends on IDF_TARGET_ESP32S3
+        config SCRL_BOARD_LILYGO_T2CAN_FD
+            bool "LilyGO T-2CAN FD"
+            depends on IDF_TARGET_ESP32S3
+        config SCRL_BOARD_WAVESHARE_S3_CAN
+            bool "Waveshare ESP32-S3-RS485-CAN"
+            depends on IDF_TARGET_ESP32S3
+    endchoice
+
+    # The board ID goes into the app image (scrl_board_desc.cpp) and the Info
+    # characteristic. A BLE update refuses an image with a different ID.
+    config SCRL_BOARD_ID
+        string
+        default "nanoh2-minican" if SCRL_BOARD_NANOH2
+        default "m5stack-atom" if SCRL_BOARD_M5STACK_ATOM
+        default "m5stack-atom-matrix" if SCRL_BOARD_M5STACK_ATOM_MATRIX
+        default "m5stack-atom-swap-pins" if SCRL_BOARD_M5STACK_ATOM_SWAP_PINS
+        default "esp32-generic-twai" if SCRL_BOARD_ESP32_GENERIC_TWAI
+        default "esp32-generic-twai-sniffer" if SCRL_BOARD_ESP32_GENERIC_TWAI_SNIFFER
+        default "esp32-mcp2515" if SCRL_BOARD_ESP32_MCP2515
+        default "esp32-lilygo" if SCRL_BOARD_ESP32_LILYGO
+        default "ttgo-tdisplay" if SCRL_BOARD_TTGO_TDISPLAY
+        default "lilygo-t2can" if SCRL_BOARD_LILYGO_T2CAN
+        default "lilygo-t2can-fd" if SCRL_BOARD_LILYGO_T2CAN_FD
+        default "waveshare-s3-can" if SCRL_BOARD_WAVESHARE_S3_CAN
+
+    choice SCRL_T2CAN_BUS
+        prompt "T-2CAN channel that goes to Vehicle CAN"
+        depends on SCRL_BOARD_LILYGO_T2CAN || SCRL_BOARD_LILYGO_T2CAN_FD
+        default SCRL_T2CAN_BUS_CAN0
+        help
+            The board uses one channel only. The other controller stays off
+            the bus.
+
+            The car-tested T-2CAN install had Vehicle CAN on can0 (TWAI).
+            Hypery's wiring table puts Vehicle CAN on can1 instead. Pick the
+            channel that your wires go to.
+
+        config SCRL_T2CAN_BUS_CAN0
+            bool "can0: TWAI (CAN B screw terminal)"
+        config SCRL_T2CAN_BUS_CAN1
+            bool "can1: MCP2515 (T-2CAN) or MCP2518FD (T-2CAN FD) (CAN A screw terminal)"
+    endchoice
+
     choice SCRL_CAN_PINS
         prompt "Grove pins for TWAI TX and RX"
+        depends on SCRL_BOARD_NANOH2
         default SCRL_CAN_PINS_UNCHECKED
         help
             The NanoH2 Grove port carries GPIO1 and GPIO2 to the Unit Mini CAN.
@@ -12,21 +96,57 @@ menu "Scroll Ack BLE board"
             (nothing powered) from the NanoH2 Grove pins to TJA1051T/3 pin 1
             (TXD) and pin 4 (RXD) on the Mini CAN. TWAI TX goes to TXD.
 
-            Until you choose, the firmware does not start the CAN controller
-            and leaves both pins as inputs.
+            Until you choose, the firmware attaches no TX pin and runs a
+            Listen-Only pin probe.
 
         config SCRL_CAN_PINS_UNCHECKED
-            bool "Not checked yet (CAN stays off)"
+            bool "Not checked yet (Listen-Only pin probe)"
         config SCRL_CAN_PINS_TX1_RX2
             bool "TX = GPIO1, RX = GPIO2"
         config SCRL_CAN_PINS_TX2_RX1
             bool "TX = GPIO2, RX = GPIO1"
     endchoice
 
+    choice SCRL_MCP2515_CRYSTAL
+        prompt "MCP2515 crystal"
+        depends on SCRL_BOARD_ESP32_MCP2515 || SCRL_BOARD_TTGO_TDISPLAY
+        default SCRL_MCP2515_CRYSTAL_8MHZ
+        help
+            Generic MCP2515 modules often have an 8 MHz crystal, some 16 MHz.
+            Read the marking on the crystal. A wrong value gives a wrong bit
+            rate. In Listen-Only that only loses frames. In Active the
+            controller puts error frames on the bus.
+
+        config SCRL_MCP2515_CRYSTAL_8MHZ
+            bool "8 MHz"
+        config SCRL_MCP2515_CRYSTAL_16MHZ
+            bool "16 MHz"
+    endchoice
+
+    # The CAN backend. Exactly one is set. Not shown in menuconfig: the board
+    # and the T-2CAN channel decide it.
+    config SCRL_CAN_TWAI
+        bool
+        default y if !SCRL_CAN_MCP2515 && !SCRL_CAN_MCP2518FD
+    config SCRL_CAN_MCP2515
+        bool
+        default y if SCRL_BOARD_ESP32_MCP2515 || SCRL_BOARD_TTGO_TDISPLAY
+        default y if SCRL_BOARD_LILYGO_T2CAN && SCRL_T2CAN_BUS_CAN1
+    config SCRL_CAN_MCP2518FD
+        bool
+        default y if SCRL_BOARD_LILYGO_T2CAN_FD && SCRL_T2CAN_BUS_CAN1
+
+    config SCRL_NEVER_TX
+        bool
+        default y if SCRL_BOARD_ESP32_GENERIC_TWAI_SNIFFER
+        help
+            The board stays in Listen-Only whatever the op mode setting says.
+
     config SCRL_CAN_BITRATE
         int "CAN bit rate (bit/s)"
         default 500000
         help
-            Tesla Vehicle CAN runs at 500 kbit/s.
+            Tesla Vehicle CAN runs at 500 kbit/s. The TWAI backend uses this
+            value. The MCP2515 and MCP2518FD backends support 500 kbit/s only.
 
 endmenu

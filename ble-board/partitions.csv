@@ -1,4 +1,4 @@
-# NanoH2: ESP32-H2FH4S, 4 MB flash. Two app slots for BLE OTA with rollback.
+# 4 MB flash on every board (the bigger S3 flashes use the first 4 MB). Two app slots for BLE OTA with rollback.
 # Name,   Type, SubType, Offset,   Size
 nvs,      data, nvs,     0x9000,   0x10000
 otadata,  data, ota,     0x19000,  0x2000

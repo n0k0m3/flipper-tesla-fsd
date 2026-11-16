@@ -1,0 +1,5 @@
+# Classic ESP32 (ATOM, DevKit, T-CAN485, T-Display). The console is UART0
+# through the USB-UART bridge (ESP-IDF default). The radio runs BLE only.
+CONFIG_BTDM_CTRL_MODE_BLE_ONLY=y
+CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=n
+CONFIG_BTDM_CTRL_MODE_BTDM=n

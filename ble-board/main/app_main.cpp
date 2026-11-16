@@ -1,9 +1,11 @@
 /*
- * app_main.cpp — BLE Scroll Ack board (M5Stack NanoH2 + Unit Mini CAN).
+ * app_main.cpp — BLE Scroll Ack board. The board is a build option
+ * (Kconfig SCRL_BOARD, pins in scrl_board.h).
  *
  * Tasks:
- *   can           takes frames from the receive interrupt, runs the frame logic,
+ *   can           takes frames from the CAN backend, runs the frame logic,
  *                 sends the ticks, and owns the CAN controller
+ *   mcp2515/fd    SPI builds only: polls the CAN controller (scrl_can_hw.h)
  *   housekeeping  button, console copy of the event log, BLE notifications,
  *                 update time limits, delayed restart
  *   NimBLE host   BLE callbacks (settings, commands, update data)
@@ -27,6 +29,7 @@
 #include "scrl_logbuf.h"
 #include "scrl_ota.h"
 #include "scrl_proc.h"
+#include "scrl_spi.h"
 #include "scrl_store.h"
 
 static const char *TAG = "scrl";
@@ -38,7 +41,7 @@ static const char *TAG = "scrl";
 #define HOUSEKEEPING_PRIORITY 3
 #define HOUSEKEEPING_STACK 6144
 #define HOUSEKEEPING_PERIOD_MS 100u
-// Pin probe: listen this long on one Grove pin before the other one gets a turn.
+// NanoH2 pin probe: listen this long on one Grove pin before the other one gets a turn.
 #define PROBE_DWELL_MS 3000u
 // A failed controller start is tried again after this long.
 #define CAN_RETRY_MS 1000u
@@ -107,19 +110,48 @@ const ScrlBootInfo *scrl_app_boot_info(void) {
 
 // ── board ─────────────────────────────────────────────────────────────────────
 
+[[maybe_unused]] static void drive_pin(int pin, int level) {
+    gpio_reset_pin((gpio_num_t)pin);
+    gpio_set_level((gpio_num_t)pin, level);
+    gpio_set_direction((gpio_num_t)pin, GPIO_MODE_OUTPUT);
+}
+
+// The fixed outputs of the board (scrl_board.h): LEDs, display and the CAN
+// controller that the build does not use.
 static void board_pins_init(void) {
-    // LEDs off. GPIO10 low removes the power of the WS2812.
-    const gpio_num_t low_pins[] = {(gpio_num_t)SCRL_PIN_RGB_PWR, (gpio_num_t)SCRL_PIN_IR_LED,
-                                   (gpio_num_t)SCRL_PIN_BLUE_LED};
-    for (gpio_num_t pin : low_pins) {
-        gpio_reset_pin(pin);
-        gpio_set_level(pin, 0);
-        gpio_set_direction(pin, GPIO_MODE_OUTPUT);
+#if defined(SCRL_BOOT_LOW_PINS)
+    const int low_pins[] = SCRL_BOOT_LOW_PINS;
+    for (int pin : low_pins) drive_pin(pin, 0);
+#endif
+#if defined(SCRL_BOOT_HIGH_PINS)
+    const int high_pins[] = SCRL_BOOT_HIGH_PINS;
+    for (int pin : high_pins) drive_pin(pin, 1);
+#endif
+#if defined(SCRL_PIN_IDLE_INPUTS)
+    const int idle_pins[] = SCRL_PIN_IDLE_INPUTS;
+    for (int pin : idle_pins) {
+        gpio_reset_pin((gpio_num_t)pin);
+        gpio_set_direction((gpio_num_t)pin, GPIO_MODE_INPUT);
+        gpio_set_pull_mode((gpio_num_t)pin, GPIO_PULLUP_ONLY);
     }
-    // The button pulls GPIO9 low. It is also the boot strap pin: input only.
+#endif
+#if defined(SCRL_QUIET_MCP2518FD)
+    // T-2CAN FD on can0: the MCP2518FD on can1 is idle. Configuration mode
+    // with ABAT takes it off the bus, also when it still runs from before an
+    // ESP32 reset (an earlier can1 image). WRITE CiCON byte 3 = 0x0C.
+    scrl_spi_init(SCRL_PIN_SPI_SCK, SCRL_PIN_SPI_MISO, SCRL_PIN_SPI_MOSI, SCRL_PIN_SPI_CS, 800000u);
+    {
+        ScrlSpiLock lock;
+        uint8_t req[3] = {0x20, 0x03, 0x0C};
+        scrl_spi_transfer(req, sizeof(req));
+    }
+#endif
+    // The button pulls its pin low. On most boards it is also a boot strap
+    // pin: input only.
     gpio_reset_pin((gpio_num_t)SCRL_PIN_BUTTON);
     gpio_set_direction((gpio_num_t)SCRL_PIN_BUTTON, GPIO_MODE_INPUT);
-    gpio_set_pull_mode((gpio_num_t)SCRL_PIN_BUTTON, GPIO_PULLUP_ONLY);
+    gpio_set_pull_mode((gpio_num_t)SCRL_PIN_BUTTON,
+                       SCRL_BUTTON_PULLUP ? GPIO_PULLUP_ONLY : GPIO_FLOATING);
 }
 
 // Short press: open the pairing window for 2 minutes. Hold 5 s: delete the bonds too.
@@ -181,9 +213,11 @@ static void can_task(void *) {
     bool running = false;
     bool listen_only = true;
     uint32_t start_at = 0;        // earliest time for the next start
+#if defined(SCRL_CAN_PIN_PROBE)
     uint32_t probe_mark_ms = 0;   // start of the current probe dwell
     uint32_t probe_frames = 0;    // rx count at probe_mark_ms
     int8_t probe_found_pin = -1;  // pin that showed frames, reported once per change
+#endif
     uint32_t logged_bus_errors = 0;
     uint32_t bus_error_log_ms = 0;
     int8_t logged_mode = -1;      // mode of the last "started" line: the probe restarts
@@ -201,10 +235,12 @@ static void can_task(void *) {
                     logged_mode = (int8_t)listen_only;
                     scrl_log("CAN  started %s", listen_only ? "Listen-Only" : "Active");
                 }
+#if defined(SCRL_CAN_PIN_PROBE)
                 ScrlCanInfo info;
                 scrl_can_get_info(&info);
                 probe_mark_ms = now;
                 probe_frames = info.rx_frames;
+#endif
             } else {
                 start_at = now + CAN_RETRY_MS;
             }
@@ -239,9 +275,10 @@ static void can_task(void *) {
             bus_error_log_ms = now;
         }
 
-        // Pin probe, only in a build with unchecked pins. Both Grove pins are
-        // inputs here, so the probe cannot disturb the transceiver.
-        if (!info.pins_checked && running && (uint32_t)(now - probe_mark_ms) >= PROBE_DWELL_MS) {
+#if defined(SCRL_CAN_PIN_PROBE)
+        // NanoH2 pin probe, only in a build with unchecked pins. Both Grove
+        // pins are inputs here, so the probe cannot disturb the transceiver.
+        if (running && (uint32_t)(now - probe_mark_ms) >= PROBE_DWELL_MS) {
             if (info.rx_frames != probe_frames) {
                 if (probe_found_pin != info.rx_pin) {
                     probe_found_pin = info.rx_pin;
@@ -258,6 +295,7 @@ static void can_task(void *) {
             probe_mark_ms = now;
             probe_frames = info.rx_frames;
         }
+#endif
     }
 }
 
@@ -271,12 +309,20 @@ extern "C" void app_main(void) {
     scrl_can_init();
     ScrlCanInfo can;
     scrl_can_get_info(&can);
-    scrl_proc_init(settings, can.pins_checked ? 0u : SCRL_INHIBIT_NO_TX_PIN);
+    bool can_tx = can.pins_checked;
+#if defined(CONFIG_SCRL_NEVER_TX)
+    can_tx = false;
+#endif
+    scrl_proc_init(settings, can_tx ? 0u : SCRL_INHIBIT_NO_TX_PIN);
     scrl_ota_init();  // may hold the board in Listen-Only until the image is confirmed
 
     scrl_log("BOOT reset reason %u, power-on count %u", (unsigned)s_boot.reset_reason,
              (unsigned)s_boot.power_on_count);
+    ESP_LOGI(TAG, "board %s (%s), CAN %s", CONFIG_SCRL_BOARD_ID, SCRL_BOARD_NAME, SCRL_CAN_KIND);
     if (!can.pins_checked) scrl_log("CAN  pins not checked: Listen-Only pin probe");
+#if defined(CONFIG_SCRL_NEVER_TX)
+    scrl_log("CAN  Listen-Only build: never transmits");
+#endif
     // The passkey goes only to the USB console, never into the event log that
     // BLE sends out. Write it on the label of the board.
     ESP_LOGI(TAG, "BLE passkey: %06u", (unsigned)s_boot.passkey);

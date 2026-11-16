@@ -1,0 +1,3 @@
+# m5stack-atom-swap-pins: see main/Kconfig.projbuild and main/scrl_board.h.
+CONFIG_IDF_TARGET="esp32"
+CONFIG_SCRL_BOARD_M5STACK_ATOM_SWAP_PINS=y
