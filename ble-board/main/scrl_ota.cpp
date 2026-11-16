@@ -39,10 +39,18 @@ static uint32_t s_received;
 static uint32_t s_credit_sent;    // offset of the last CREDIT
 static uint32_t s_last_data_ms;
 
-struct Lock {
-    Lock() { xSemaphoreTake(s_lock, portMAX_DELAY); }
-    ~Lock() { xSemaphoreGive(s_lock); }
+// In an unnamed namespace, with its own name: scrl_proc.cpp and scrl_ota.cpp
+// each had a file-scope "struct Lock" with inline members. The linker kept
+// one destructor for both, so a update lock gave the mutex of the other file,
+// and the next lock in the same task blocked for ever.
+namespace {
+struct OtaLock {
+    OtaLock() { xSemaphoreTake(s_lock, portMAX_DELAY); }
+    ~OtaLock() { xSemaphoreGive(s_lock); }
+    OtaLock(const OtaLock &) = delete;
+    OtaLock &operator=(const OtaLock &) = delete;
 };
+}  // namespace
 
 static void fill_event(uint8_t *event, uint8_t evt, uint8_t status) {
     event[0] = evt;
@@ -90,12 +98,12 @@ void scrl_ota_init(void) {
 }
 
 bool scrl_ota_image_pending(void) {
-    Lock lock;
+    OtaLock lock;
     return s_pending;
 }
 
 bool scrl_ota_confirm(void) {
-    Lock lock;
+    OtaLock lock;
     if (!s_pending) return true;
     esp_err_t err = esp_ota_mark_app_valid_cancel_rollback();
     if (err != ESP_OK) {
@@ -109,7 +117,7 @@ bool scrl_ota_confirm(void) {
 }
 
 bool scrl_ota_active(void) {
-    Lock lock;
+    OtaLock lock;
     return s_active;
 }
 
@@ -185,7 +193,7 @@ static uint8_t end_update(void) {
 }
 
 bool scrl_ota_control(const uint8_t *data, size_t len, uint8_t *event) {
-    Lock lock;
+    OtaLock lock;
     uint8_t op = len > 0u ? data[0] : 0u;
     bool restart = false;
     if (op == SCRL_OTA_OP_BEGIN) {
@@ -206,7 +214,7 @@ bool scrl_ota_control(const uint8_t *data, size_t len, uint8_t *event) {
 }
 
 bool scrl_ota_data(const uint8_t *data, size_t len, uint8_t *event) {
-    Lock lock;
+    OtaLock lock;
     if (!s_active || len == 0u) return false;
     uint8_t status = SCRL_OTA_OK;
     if (len > s_size - s_received) {
@@ -252,12 +260,12 @@ bool scrl_ota_data(const uint8_t *data, size_t len, uint8_t *event) {
 }
 
 void scrl_ota_link_lost(void) {
-    Lock lock;
+    OtaLock lock;
     stop_update(SCRL_OTA_ERR_LINK);
 }
 
 bool scrl_ota_tick(uint8_t *event) {
-    Lock lock;
+    OtaLock lock;
     uint32_t now = scrl_millis();
     if (s_active && (uint32_t)(now - s_last_data_ms) > SCRL_OTA_IDLE_MS) {
         stop_update(SCRL_OTA_ERR_TIMEOUT);

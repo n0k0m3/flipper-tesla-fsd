@@ -48,10 +48,18 @@ static uint32_t s_rx_3c2, s_rx_39b, s_rx_370, s_rx_257, s_rx_318, s_rx_129;
 static uint32_t s_first_rx_ms;  // 0 = no frame yet
 static uint32_t s_last_rx_ms;
 
-struct Lock {
-    Lock() { xSemaphoreTake(s_lock, portMAX_DELAY); }
-    ~Lock() { xSemaphoreGive(s_lock); }
+// In an unnamed namespace, with its own name: scrl_proc.cpp and scrl_ota.cpp
+// each had a file-scope "struct Lock" with inline members. The linker kept
+// one destructor for both, so a proc lock gave the mutex of the other file,
+// and the next lock in the same task blocked for ever.
+namespace {
+struct ProcLock {
+    ProcLock() { xSemaphoreTake(s_lock, portMAX_DELAY); }
+    ~ProcLock() { xSemaphoreGive(s_lock); }
+    ProcLock(const ProcLock &) = delete;
+    ProcLock &operator=(const ProcLock &) = delete;
 };
+}  // namespace
 
 // Effective op mode = the setting, unless something inhibits Active.
 static void update_op_mode(void) {
@@ -90,7 +98,7 @@ void scrl_proc_handle_frame(const CanFrame &frame) {
     // Extended and remote frames, and DLC above 8, are counted and not parsed.
     bool usable = tesla_can_rx_accept(frame.id, frame.ext != 0u, frame.req != 0u, frame.dlc);
 
-    Lock lock;
+    ProcLock lock;
     s_state.rx_count++;
     if (s_first_rx_ms == 0u) s_first_rx_ms = now == 0u ? 1u : now;
     s_last_rx_ms = now;
@@ -200,12 +208,12 @@ void scrl_proc_handle_frame(const CanFrame &frame) {
 }
 
 ScrlSettings scrl_proc_get_settings(void) {
-    Lock lock;
+    ProcLock lock;
     return s_settings;
 }
 
 void scrl_proc_set_settings(const ScrlSettings &settings, bool release_bus_off_lock) {
-    Lock lock;
+    ProcLock lock;
     bool reset = settings.enabled != s_settings.enabled || settings.mode != s_settings.mode;
     if (release_bus_off_lock && settings.op_mode == (uint8_t)OpMode_Active) {
         s_inhibit &= ~SCRL_INHIBIT_BUS_OFF;
@@ -217,7 +225,7 @@ void scrl_proc_set_settings(const ScrlSettings &settings, bool release_bus_off_l
 }
 
 void scrl_proc_set_inhibit(uint32_t bits, bool on) {
-    Lock lock;
+    ProcLock lock;
     if (on) {
         s_inhibit |= bits;
     } else {
@@ -227,7 +235,7 @@ void scrl_proc_set_inhibit(uint32_t bits, bool on) {
 }
 
 uint32_t scrl_proc_get_inhibit(void) {
-    Lock lock;
+    ProcLock lock;
     return s_inhibit;
 }
 
@@ -237,7 +245,7 @@ bool scrl_proc_active(void) {
 
 void scrl_proc_fill_status(ScrlStatus *out) {
     uint32_t now = scrl_millis();
-    Lock lock;
+    ProcLock lock;
     out->scroll = s_scroll;
     out->op_mode = s_settings.op_mode;
     out->rx_all = s_state.rx_count;
@@ -271,7 +279,7 @@ void scrl_proc_fill_status(ScrlStatus *out) {
 }
 
 void scrl_proc_reset_counters(void) {
-    Lock lock;
+    ProcLock lock;
     s_scroll.sent_count = 0;
     s_scroll.pairs_aborted = 0;
     s_state.rx_count = 0;
@@ -280,7 +288,7 @@ void scrl_proc_reset_counters(void) {
 
 bool scrl_proc_parked(void) {
     uint32_t now = scrl_millis();
-    Lock lock;
+    ProcLock lock;
     bool silent = s_first_rx_ms == 0u || (uint32_t)(now - s_last_rx_ms) > BUS_SILENT_MS;
     if (silent) return true;
 
