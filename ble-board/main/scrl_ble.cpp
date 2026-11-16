@@ -549,8 +549,47 @@ void scrl_ble_init(uint32_t passkey, bool power_on) {
     nimble_port_freertos_init(host_task);
 }
 
+// Host heartbeat (USB console only). While a phone is connected, the
+// housekeeping task puts one event on the NimBLE host queue every 5 s. The
+// host task logs the link state when it runs the event. If the host task
+// stops, the lines stop, and the housekeeping task says that the last event
+// still waits. Then the fault is in the host task, not on the air.
+#define HOST_BEAT_MS 5000u
+static struct ble_npl_event s_beat_ev;
+static bool s_beat_init;
+static uint32_t s_beat_last_ms;
+
+static void host_beat(struct ble_npl_event *) {
+    struct ble_gap_conn_desc desc;
+    uint16_t conn = s_conn.load();
+    if (conn == BLE_HS_CONN_HANDLE_NONE || ble_gap_conn_find(conn, &desc) != 0) {
+        ESP_LOGI(TAG, "host alive, no link");
+        return;
+    }
+    ESP_LOGI(TAG, "host alive, link %u, MTU %u, encrypted %u, authenticated %u, bonded %u, key %u",
+             (unsigned)conn, (unsigned)ble_att_mtu(conn), (unsigned)desc.sec_state.encrypted,
+             (unsigned)desc.sec_state.authenticated, (unsigned)desc.sec_state.bonded,
+             (unsigned)desc.sec_state.key_size);
+}
+
+static void host_beat_tick(uint32_t now) {
+    if (!s_beat_init) {
+        ble_npl_event_init(&s_beat_ev, host_beat, nullptr);
+        s_beat_init = true;
+    }
+    if (s_conn.load() == BLE_HS_CONN_HANDLE_NONE) return;
+    if ((uint32_t)(now - s_beat_last_ms) < HOST_BEAT_MS) return;
+    s_beat_last_ms = now;
+    if (ble_npl_event_is_queued(&s_beat_ev)) {
+        ESP_LOGW(TAG, "host task did not run the last heartbeat in %u ms", (unsigned)HOST_BEAT_MS);
+        return;
+    }
+    ble_npl_eventq_put(nimble_port_get_dflt_eventq(), &s_beat_ev);
+}
+
 void scrl_ble_tick(void) {
     uint32_t now = scrl_millis();
+    host_beat_tick(now);
     // The update time limits run with or without a phone.
     uint8_t event[SCRL_OTA_EVENT_LEN];
     if (scrl_ota_tick(event) && s_sub_ota.load()) notify(s_h_ota_ctrl, event, sizeof(event));
