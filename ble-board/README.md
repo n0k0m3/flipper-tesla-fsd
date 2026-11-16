@@ -50,7 +50,7 @@ In Listen-Only the TX pin is never attached, in every build.
 The passkey is random. The board makes it at the first boot and keeps it in NVS. It is not in the source code.
 The board never changes it by itself. A factory reset erases the settings, the counters and the bonds, and keeps the passkey, so the label stays correct. A full flash erase over USB makes a new random one.
 
-To change the passkey, use the Board panel of the web page (command `06`). Only a phone that is paired can do it.
+To change the passkey, use the Board page of the control app (command `06`). Only a phone that is paired can do it.
 - The new passkey counts from the next new pairing.
 - The phones that are paired stay paired. To remove them, use "Forget bonds" too.
 - Write the new number on the label. The board shows it again only on the USB console.
@@ -122,27 +122,17 @@ Security:
 Secure Boot is off on purpose. It burns eFuses for good.
 If both slots fail, flash the board over USB on the bench.
 
-## Web page
+## Control app
 
-`web/index.html` is the control page. It is one static file with no external assets.
+The control app for the board is the TSL6 web app (repo `tsl6-webble`). It shows the board as one more device type: the same tabs as for a TSL6, with only the rows that the board has. This repo has no web page of its own.
 
 | Item | Value |
 |---|---|
 | Browsers | Chrome or Edge on Android and desktop. Bluefy on iPhone |
-| Host | Any HTTPS host. For example `surge ble-board/web <name>.surge.sh`, or `tailscale serve` |
-| Panels | Connect, Status, Settings, Board, Log, Update |
-| Status | **Checked against a simulated board only. It never talked to a real board.** |
+| Device name | `SCRL-xxxx` in the Bluetooth list |
+| Status | **Checked against a mock board only. The app never talked to a real board.** |
 
-How it works with the board:
-1. The page reads Info (open), then Status. The Status read starts the pairing. The phone asks for the passkey, the page never does.
-2. The page tries the Status read again until it works or the board drops the link (30 s).
-3. Only then the page subscribes to Live, Log and OTA control.
-4. A save writes only the changed keys and reads the settings back. A change to Active needs a confirm tick.
-5. A bus-off lock has its own button. It writes `{"op_mode":1}`.
-6. Update: the page checks the file first (magic `0xE9`, chip ID, project name `scrl-ble-board`, size, the SHA-256 at the end of the image). After a good update it connects to the same board again and shows the Confirm button.
-7. The page cannot read the link MTU. "Bytes per write" is 240 (180 on Apple devices). If the board reports a cut write, or sends no credit, the page stops and selects the next smaller size.
-
-Open `web/index.html?mock` to run the page against a simulated board. Options: `&pair` (pairing delay), `&lock` (bus-off lock), `&pending` (unconfirmed image), `&cut=N` (writes longer than N bytes are cut). The mock proves the page wiring only.
+The app repo checks itself against this firmware. Its tool `tools/scrl-fixture.mjs` reads the `#define` values in `main/*.h`, the UUIDs in `scrl_ble.cpp` and the slot size in `partitions.csv`, and it runs `test/scrl_vectors` from this repo (the real status packers, settings reader and passkey reader). After a change of the BLE protocol here, run that tool in the app repo and commit the new fixture there.
 
 ## CAN timing
 
@@ -186,9 +176,6 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/scrl_ble.*` | NimBLE service, pairing rules |
 | `main/scrl_ota.*` | BLE update and rollback |
 | `main/scrl_board.h` | Pin map, ms clock |
-| `web/index.html` | Web Bluetooth control page, with a mock board (`?mock`) |
-| `web/test/page.test.mjs` | Test of the page codec against the firmware |
-| `web/test/browser.test.mjs` | Test of the page in headless Chrome, against the mock board |
 
 ## Tests
 
@@ -197,17 +184,11 @@ Run `make -C test check` in the repo root. It builds and runs on the host:
 - `test_scrl_settings`: the settings codec and the passkey reader.
 - `test_scrl_status`: the status JSON, the Live record and the event log ring.
 
-Run `make -C test check-web` for the web page. It needs Node.js, so it is not part of `check`. It checks the codec of the page against:
-- the `#define` values in `main/*.h`, the UUIDs in `scrl_ble.cpp` and the slot size in `partitions.csv`,
-- the status JSON and the Live record that the firmware packers make (`test/scrl_vectors`),
-- the settings reader of the firmware: it must accept each write of the page,
-- the built image `build/scrl-ble-board.bin`, when it exists.
-
-Run `make -C test check-web-browser` for the page in headless Chrome. It needs `playwright-core` and Chrome (see the head of `web/test/browser.test.mjs`) and skips without them. It runs 15 scenarios: connect, pairing delay, settings, bus-off lock, update, cut write, stalled write, abort, wrong image, restart, change of the passkey, factory reset, and four scenarios with a fake `navigator.bluetooth` that drive the Web Bluetooth class of the page (reconnect, cancelled chooser, rejected write, a browser with only `writeValue`). All of them answer from the mock board in the page.
+`test/scrl_vectors` is a host tool, not a test. It prints what the firmware packers make and what the firmware readers accept. The control app repo uses it (see "Control app"). Build it with `make -C test scrl_vectors`.
 
 ## Not done yet
 
-- A test of the web page with a real board, on Android, on desktop and in Bluefy.
+- A test of the control app with a real board, on Android, on desktop and in Bluefy.
 - A bench replay against the T-2CAN output, and every test on hardware.
 - Settings for AP-First, Soft Engage and Abort Guard.
 - Sleep, if the glovebox port stays on while the car sleeps.

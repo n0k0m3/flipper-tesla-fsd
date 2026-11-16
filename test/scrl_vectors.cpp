@@ -1,8 +1,8 @@
 /*
  * scrl_vectors.cpp — prints what the firmware code of the BLE board makes and
- * accepts, for the test of the web page (ble-board/web/test/page.test.mjs).
- * The page test must use the real packers and the real settings reader, not
- * a copy of them.
+ * accepts, for the control app (repo tsl6-webble, tools/scrl-fixture.mjs).
+ * The app must check itself against the real packers and the real readers,
+ * not against a copy of them.
  *
  *   scrl_vectors            print the fixtures as one JSON object
  *   scrl_vectors parse      read two lines from stdin: the settings on the

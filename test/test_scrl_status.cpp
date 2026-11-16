@@ -111,7 +111,7 @@ static void test_live_record(void) {
 }
 
 static void test_flag_layout(void) {
-    // The web page reads these bits. A change here must be a deliberate one.
+    // The control app reads these bits. A change here must be a deliberate one.
     CHECK(SCRL_FLAG_TX_ALLOWED == 0x0001 && SCRL_FLAG_TIMER_ARMED == 0x0002 &&
               SCRL_FLAG_ACTIVE == 0x0004 && SCRL_FLAG_WRONG_BUS == 0x0008 &&
               SCRL_FLAG_OTA_BLIND == 0x0010, "the five design flags are bits 0-4");

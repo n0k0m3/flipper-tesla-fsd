@@ -1,8 +1,8 @@
 #pragma once
 /*
  * scrl_sample.h — one sample status of the BLE board, shared by
- * test_scrl_status.cpp and scrl_vectors.cpp. The web page test
- * (ble-board/web/test/page.test.mjs) decodes the bytes that the firmware
+ * test_scrl_status.cpp and scrl_vectors.cpp. The test of the control app
+ * (repo tsl6-webble, test/scrl.mjs) decodes the bytes that the firmware
  * packers make from this sample, so the values here are its expected values.
  */
 
