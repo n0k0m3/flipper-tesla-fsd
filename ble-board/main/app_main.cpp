@@ -47,6 +47,13 @@ static const char *TAG = "scrl";
 #define CAN_RETRY_MS 1000u
 // Shortest time between two "bus errors" lines in the event log.
 #define BUS_ERROR_LOG_MS 10000u
+// The passkey line repeats on the USB console this often, in the first
+// PASSKEY_ECHO_BOOT_MS after a boot and while the pairing window is open, but
+// not while a phone is connected. A flash page that opens the port after the
+// reset (the S3 and H2 USB port drops during a reset) still sees it. USB
+// console only, never the BLE log.
+#define PASSKEY_ECHO_PERIOD_MS 3000u
+#define PASSKEY_ECHO_BOOT_MS (2u * 60u * 1000u)
 // Hold the button this long to delete the bonds.
 #define BUTTON_LONG_MS 5000u
 
@@ -185,12 +192,21 @@ static void button_poll(uint32_t now) {
 
 static void housekeeping_task(void *) {
     uint32_t console_cursor = 0;
+    uint32_t passkey_echo_ms = scrl_millis();
     for (;;) {
         vTaskDelay(pdMS_TO_TICKS(HOUSEKEEPING_PERIOD_MS));
         uint32_t now = scrl_millis();
 
         button_poll(now);
         scrl_ble_tick();
+
+        // No echo while a phone is connected: it has paired, or types the
+        // passkey from the label now.
+        if (!scrl_ble_connected() && (now < PASSKEY_ECHO_BOOT_MS || scrl_ble_pairing_open()) &&
+            (uint32_t)(now - passkey_echo_ms) >= PASSKEY_ECHO_PERIOD_MS) {
+            passkey_echo_ms = now;
+            ESP_LOGI(TAG, "BLE passkey: %06u (board %s)", (unsigned)s_boot.passkey, CONFIG_SCRL_BOARD_ID);
+        }
 
         // Copy new event lines to the USB console.
         uint32_t oldest = scrl_log_oldest_seq();
@@ -325,7 +341,7 @@ extern "C" void app_main(void) {
 #endif
     // The passkey goes only to the USB console, never into the event log that
     // BLE sends out. Write it on the label of the board.
-    ESP_LOGI(TAG, "BLE passkey: %06u", (unsigned)s_boot.passkey);
+    ESP_LOGI(TAG, "BLE passkey: %06u (board %s)", (unsigned)s_boot.passkey, CONFIG_SCRL_BOARD_ID);
 
     xTaskCreate(can_task, "can", CAN_TASK_STACK, nullptr, CAN_TASK_PRIORITY, nullptr);
     // The pairing window of power-on does not open on a restart (command,

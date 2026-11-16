@@ -104,6 +104,10 @@ bool scrl_ble_pairing_open(void) {
     return true;
 }
 
+bool scrl_ble_connected(void) {
+    return s_conn.load() != BLE_HS_CONN_HANDLE_NONE;
+}
+
 void scrl_ble_open_pairing(uint32_t duration_ms) {
     s_pair_until_ms.store(scrl_millis() + duration_ms);
     s_pair_open.store(true);
@@ -252,21 +256,20 @@ static int access_read(ChrId id, struct ble_gatt_access_ctxt *ctxt) {
 
 static int access_write(uint16_t conn, ChrId id, struct ble_gatt_access_ctxt *ctxt);
 
-// Every GATT read and write gives one line on the USB console (not in the BLE
-// log): the phone side of a failed connect does not show what reached the board.
+// A GATT read or write that fails gives one line on the USB console (not in
+// the BLE log): the phone side of a failed connect does not show what reached
+// the board. A good access gives no line: the app reads Status every 5 s.
 static int access_cb(uint16_t conn, uint16_t, struct ble_gatt_access_ctxt *ctxt, void *arg) {
     ChrId id = (ChrId)(intptr_t)arg;
     const char *name = (unsigned)id < sizeof(CHR_NAMES) / sizeof(CHR_NAMES[0]) ? CHR_NAMES[id] : "?";
     if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
         int rc = access_read(id, ctxt);
-        ESP_LOGI(TAG, "GATT read %s offset %u: rc %d, %u bytes", name, (unsigned)ctxt->offset, rc,
-                 (unsigned)OS_MBUF_PKTLEN(ctxt->om));
+        if (rc != 0) ESP_LOGW(TAG, "GATT read %s offset %u: rc %d", name, (unsigned)ctxt->offset, rc);
         return rc;
     }
     unsigned len = ctxt->om ? (unsigned)OS_MBUF_PKTLEN(ctxt->om) : 0u;
     int rc = access_write(conn, id, ctxt);
-    // ota_data comes thousands of times per update: log only a refused write.
-    if (id != CHR_OTA_DATA || rc != 0) ESP_LOGI(TAG, "GATT write %s, %u bytes: rc %d", name, len, rc);
+    if (rc != 0) ESP_LOGW(TAG, "GATT write %s, %u bytes: rc %d", name, len, rc);
     return rc;
 }
 
@@ -368,7 +371,7 @@ static int gap_event(struct ble_gap_event *event, void *) {
         return 0;
 
     case BLE_GAP_EVENT_ENC_CHANGE:
-        ESP_LOGI(TAG, "GAP encryption change, status %d", event->enc_change.status);
+        ESP_LOGD(TAG, "GAP encryption change, status %d", event->enc_change.status);
         if (ble_gap_conn_find(event->enc_change.conn_handle, &desc) != 0) return 0;
         if (event->enc_change.status == 0 && desc.sec_state.encrypted &&
             desc.sec_state.authenticated) {
@@ -410,16 +413,16 @@ static int gap_event(struct ble_gap_event *event, void *) {
         return BLE_GAP_REPEAT_PAIRING_RETRY;
 
     case BLE_GAP_EVENT_MTU:
-        ESP_LOGI(TAG, "GAP MTU %u", (unsigned)event->mtu.value);
+        ESP_LOGD(TAG, "GAP MTU %u", (unsigned)event->mtu.value);
         return 0;
 
     case BLE_GAP_EVENT_CONN_UPDATE:
-        ESP_LOGI(TAG, "GAP connection update, status %d", event->conn_update.status);
+        ESP_LOGD(TAG, "GAP connection update, status %d", event->conn_update.status);
         return 0;
 
     case BLE_GAP_EVENT_SUBSCRIBE: {
         bool on = event->subscribe.cur_notify != 0;
-        ESP_LOGI(TAG, "GAP subscribe handle %u notify %u reason %u", (unsigned)event->subscribe.attr_handle,
+        ESP_LOGD(TAG, "GAP subscribe handle %u notify %u reason %u", (unsigned)event->subscribe.attr_handle,
                  (unsigned)event->subscribe.cur_notify, (unsigned)event->subscribe.reason);
         if (event->subscribe.attr_handle == s_h_live) {
             s_sub_live.store(on);
@@ -552,9 +555,9 @@ void scrl_ble_init(uint32_t passkey, bool power_on) {
 
 // Host heartbeat (USB console only). While a phone is connected, the
 // housekeeping task puts one event on the NimBLE host queue every 5 s. The
-// host task logs the link state when it runs the event. If the host task
-// stops, the lines stop, and the housekeeping task says that the last event
-// still waits. Then the fault is in the host task, not on the air.
+// host task runs it and logs nothing, except after a stall. If the event
+// still waits at the next beat, the housekeeping task says so: then the fault
+// is in the host task, not on the air.
 #define HOST_BEAT_MS 5000u
 static struct ble_npl_event s_beat_ev;
 static bool s_beat_init;
@@ -564,14 +567,16 @@ static bool s_beat_dumped;       // backtraces printed for this stall
 
 static void host_beat(struct ble_npl_event *) {
     struct ble_gap_conn_desc desc;
+    bool was_stalled = s_beat_stalls != 0u;
     s_beat_stalls = 0;
     s_beat_dumped = false;
+    if (!was_stalled) return;
     uint16_t conn = s_conn.load();
     if (conn == BLE_HS_CONN_HANDLE_NONE || ble_gap_conn_find(conn, &desc) != 0) {
-        ESP_LOGI(TAG, "host alive, no link");
+        ESP_LOGW(TAG, "host task runs again, no link");
         return;
     }
-    ESP_LOGI(TAG, "host alive, link %u, MTU %u, encrypted %u, authenticated %u, bonded %u, key %u",
+    ESP_LOGW(TAG, "host task runs again: link %u, MTU %u, encrypted %u, authenticated %u, bonded %u, key %u",
              (unsigned)conn, (unsigned)ble_att_mtu(conn), (unsigned)desc.sec_state.encrypted,
              (unsigned)desc.sec_state.authenticated, (unsigned)desc.sec_state.bonded,
              (unsigned)desc.sec_state.key_size);

@@ -59,5 +59,8 @@ void scrl_ble_open_pairing(uint32_t duration_ms);
 
 bool scrl_ble_pairing_open(void);
 
+/** True while a phone is connected (authenticated or not). */
+bool scrl_ble_connected(void);
+
 /** Delete every bond and drop the link. */
 void scrl_ble_forget_bonds(void);
