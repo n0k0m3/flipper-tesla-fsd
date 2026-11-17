@@ -97,6 +97,20 @@ In the car, use a charge-only cable.
 - Scroll Ack off.
 - Listen-Only.
 - Prompt mode, pattern `-1` then `+1`, delay 600 ms, gap 100 ms, interval 2500 ms.
+- Left wheel (`lr` 0), random Timer interval (`rand` 1).
+
+## Ported TSL6 settings
+
+Since firmware 0.3.0 the board has some settings of the TSL6 module. Each one is a key in the Settings JSON. The key is the TSL6 setting ID, and the value is the TSL6 raw value, so the control app maps them by name. The app shows a setting only when the board reports its key.
+
+| Key | Values | What it does |
+|---|---|---|
+| `lr` | 0 left wheel (volume), 1 right wheel (set speed), 2 alternate | Wheel of the tick pair. Both ticks of a pair use the same wheel. TSL6 value 3 sends right-wheel tilt bits, not ticks: not ported |
+| `rand` | 0 exact, 1 random | Timer mode: 0 = each interval is the mean, 1 = mean +/- 20 % |
+| `pattern` 4, 5 | 4 alternate, 5 random | Tick order (TSL6 `jj` 2 and 3). 4 = the first tick changes direction each pair. 5 = a random first direction |
+
+A value above the maximum of a key is refused, not clamped. The values go in one NVS blob (`feat`), in the order of `SCRL_FEATURES` in `main/scrl_settings.h`. Add new keys only at the end.
+The shared `scroll_ack.h` of the T-2CAN does not change. `main/scrl_scroll_ext.h` changes the pattern before each step, moves a tick to the right wheel, and sets a fixed Timer interval.
 
 ## TX gates
 
@@ -213,10 +227,11 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/scrl_spi.*` | SPI link for the two SPI backends |
 | `main/scrl_rx_ids.h` | The 6 IDs that the frame logic reads: hardware filters of the SPI backends |
 | `main/scrl_proc.*` | Frame logic: a cut-down `process_frame()` with the T-2CAN gates |
-| `main/scrl_settings.h` | Settings and their JSON codec (host-tested) |
+| `main/scrl_settings.h` | Settings, the ported TSL6 settings and their JSON codec (host-tested) |
+| `main/scrl_scroll_ext.h` | Wheel, tick order and fixed interval around the shared Scroll Ack code (host-tested) |
 | `main/scrl_status.h` | Status JSON and Live record (host-tested) |
 | `main/scrl_log.h`, `scrl_logbuf.*` | Event log ring (host-tested) and its lock |
-| `main/scrl_store.*` | NVS: settings with the T-2CAN keys, boot record, passkey |
+| `main/scrl_store.*` | NVS: settings with the T-2CAN keys, the ported settings blob, boot record, passkey |
 | `main/scrl_passkey.h` | Reader for the set-passkey command (host-tested) |
 | `main/scrl_ble.*` | NimBLE service, pairing rules |
 | `main/scrl_ota.*` | BLE update and rollback |
@@ -229,7 +244,8 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 
 Run `make -C test check` in the repo root. It builds and runs on the host:
 - `test_scroll_ack`: the shared Scroll Ack state machine.
-- `test_scrl_settings`: the settings codec and the passkey reader.
+- `test_scrl_settings`: the settings codec, the ported settings and the passkey reader.
+- `test_scrl_scroll_ext`: the right wheel, the alternate wheel, the alternate and random tick order, and the fixed interval.
 - `test_scrl_status`: the status JSON, the Live record and the event log ring.
 - `test_scrl_spi`: MCP2515 and MCP2518FD packing and bit timing, the filter list, and the board check of an update.
 
