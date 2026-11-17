@@ -18,6 +18,7 @@
 #include "scrl_board.h"
 #include "scrl_can.h"
 #include "scrl_logbuf.h"
+#include "scrl_scroll_ext.h"
 #include "scroll_ack.h"
 #include "../../fsd_logic/fsd_can_ops.h"    // tesla_can_rx_accept
 #include "../../fsd_logic/fsd_freshness.h"  // fsd_tx_fresh
@@ -40,6 +41,7 @@
 static SemaphoreHandle_t s_lock;
 static FSDState s_state;
 static ScrollAckRuntime s_scroll;
+static ScrlScrollExt s_scroll_ext;
 static ScrlSettings s_settings;
 static uint32_t s_inhibit;
 static std::atomic<bool> s_active;
@@ -84,6 +86,7 @@ void scrl_proc_init(const ScrlSettings &settings, uint32_t inhibit) {
     s_state.nag_killer = false;
     s_state.suppress_speed_chime = false;
     memset(&s_scroll, 0, sizeof(s_scroll));
+    memset(&s_scroll_ext, 0, sizeof(s_scroll_ext));
     s_settings = settings;
     scrl_settings_clamp(&s_settings);
     scrl_settings_to_state(s_settings, &s_state);
@@ -187,21 +190,30 @@ void scrl_proc_handle_frame(const CanFrame &frame) {
     // HW4 is fixed at build time. Also require that a valid 0x39B was seen.
     in.hw4 = s_state.hw_version == TeslaHW_HW4 && s_state.das_hw4_status_seen;
     in.mode = s_state.scroll_ack_mode;
-    in.pattern = s_state.scroll_ack_pattern;
     in.delay_mean_ms = s_state.scroll_ack_delay_ms;
     in.gap_mean_ms = s_state.scroll_ack_gap_ms;
     in.interval_mean_ms = s_state.scroll_ack_interval_ms;
     in.rand = esp_random();
+    // Board tick orders (alternate, random) become DOWN_UP or UP_DOWN here.
+    in.pattern = scrl_ext_pattern(&s_scroll_ext, s_settings.pattern, in.rand);
 
+    bool armed_before = s_scroll.timer_armed;
     CanFrame out;
     ScrollAckAction act = scroll_ack_step(&s_scroll, in, frame, now, &out);
+    if (s_settings.feat[SCRL_F_RAND] == 0u) {
+        scrl_ext_fix_interval(&s_scroll, armed_before, act, in.mode, in.interval_mean_ms, now);
+    }
     if (act == ScrollAckAction::None) return;
+    scrl_ext_place_tick(&s_scroll_ext, s_settings.feat[SCRL_F_LR], act, frame, &out);
 
     bool sent = scrl_can_send(out);
     scroll_ack_complete(&s_scroll, act, sent);
+    if (sent && act == ScrollAckAction::FirstTick) scrl_ext_first_sent(&s_scroll_ext, out);
     if (sent) {
-        scrl_log("SCRL 0x3C2 left tick %s (%s) TX %s",
-                 (out.data[2] & 0x3Fu) == 0x01u ? "+1" : "-1",
+        uint8_t field = s_scroll_ext.pair_right ? out.data[3] : out.data[2];
+        scrl_log("SCRL 0x3C2 %s tick %s (%s) TX %s",
+                 s_scroll_ext.pair_right ? "right" : "left",
+                 (field & 0x3Fu) == 0x01u ? "+1" : "-1",
                  act == ScrollAckAction::FirstTick ? "first" : "second",
                  can_bus_name(SCRL_BUS));
     }
