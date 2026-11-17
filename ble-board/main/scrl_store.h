@@ -6,6 +6,7 @@
  *   scrAck (u8), scrMode (u8), scrPat (u8), scrDly (u16), scrGap (u16), scrInt (u16)
  * Added for this board:
  *   opMode (u8), pwrOnCnt (u32), rstLog (4 bytes, newest first), passkey (u32)
+ *   feat (blob, one byte per ported TSL6 feature, SCRL_FEATURES order)
  * The passkey is made at the first boot. A factory reset keeps it. Only the
  * owner changes it, with scrl_store_set_passkey().
  * NimBLE keeps the bonds in its own namespace.

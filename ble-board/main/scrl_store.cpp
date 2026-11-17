@@ -45,11 +45,21 @@ ScrlSettings scrl_store_load_settings(void) {
     if (nvs_get_u16(s_nvs, "scrGap", &u16) == ESP_OK) { s.gap_ms = u16; found++; }
     if (nvs_get_u16(s_nvs, "scrInt", &u16) == ESP_OK) { s.interval_ms = u16; found++; }
     if (nvs_get_u8(s_nvs, "opMode", &u8) == ESP_OK) { s.op_mode = u8; found++; }
+    // Ported features: one blob, in SCRL_FEATURES order. An older, shorter blob
+    // keeps the defaults of the features that it does not have.
+    uint8_t feat[SCRL_F_COUNT + 32u];
+    size_t feat_len = sizeof(feat);
+    bool feat_full = false;
+    if (nvs_get_blob(s_nvs, "feat", feat, &feat_len) == ESP_OK) {
+        size_t n = feat_len < SCRL_F_COUNT ? feat_len : (size_t)SCRL_F_COUNT;
+        memcpy(s.feat, feat, n);
+        feat_full = feat_len == SCRL_F_COUNT;
+    }
     ScrlSettings raw = s;
     scrl_settings_clamp(&s);
     // NVS matches the result only when every key exists and none was out of range.
     s_saved = s;
-    s_saved_valid = found == 7 && scrl_settings_equal(raw, s);
+    s_saved_valid = found == 7 && feat_full && scrl_settings_equal(raw, s);
     return s;
 }
 
@@ -77,6 +87,11 @@ void scrl_store_save_settings(const ScrlSettings &s) {
     put_u16("scrGap", s.gap_ms, s_saved.gap_ms);
     put_u16("scrInt", s.interval_ms, s_saved.interval_ms);
     put_u8("opMode", s.op_mode, s_saved.op_mode);
+    if (all || memcmp(s.feat, s_saved.feat, sizeof(s.feat)) != 0) {
+        esp_err_t e = nvs_set_blob(s_nvs, "feat", s.feat, sizeof(s.feat));
+        if (e != ESP_OK) err = e;
+        wrote = true;
+    }
     if (!wrote) return;
     if (err == ESP_OK) err = nvs_commit(s_nvs);
     if (err == ESP_OK) {
@@ -145,7 +160,7 @@ void scrl_store_factory_reset(void) {
     // of the board. A new one would show only on the USB console, and in the
     // car that locks the owner out of the board.
     static const char *const keys[] = {"scrAck", "scrMode", "scrPat", "scrDly", "scrGap",
-                                       "scrInt", "opMode", "pwrOnCnt", "rstLog"};
+                                       "scrInt", "opMode", "feat", "pwrOnCnt", "rstLog"};
     for (const char *key : keys) {
         esp_err_t err = nvs_erase_key(s_nvs, key);
         if (err != ESP_OK && err != ESP_ERR_NVS_NOT_FOUND) {

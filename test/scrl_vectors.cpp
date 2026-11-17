@@ -115,7 +115,7 @@ static int parse_write(void) {
     }
     bool named = false;
     ScrlSettingsParse result = scrl_settings_from_json(write.data(), write.size(), &s, &named);
-    char json[160];
+    char json[SCRL_SETTINGS_JSON_MAX];
     if (scrl_settings_to_json(s, json, sizeof(json)) == 0u) return 1;
     printf("{\"result\":%d,\"op_mode_named\":%s,\"settings\":%s}\n", (int)result,
            named ? "true" : "false", json);

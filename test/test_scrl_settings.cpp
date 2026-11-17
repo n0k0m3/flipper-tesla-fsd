@@ -36,6 +36,7 @@ static void test_defaults(void) {
     CHECK(s.mode == SCROLL_ACK_MODE_PROMPT, "Prompt mode by default");
     CHECK(s.pattern == SCROLL_ACK_PATTERN_DOWN_UP, "-1 then +1 by default");
     CHECK(s.delay_ms == 600 && s.gap_ms == 100 && s.interval_ms == 2500, "default times");
+    CHECK(s.feat[SCRL_F_LR] == 0 && s.feat[SCRL_F_RAND] == 1, "left wheel, random interval");
     ScrlSettings c = s;
     scrl_settings_clamp(&c);
     CHECK(scrl_settings_equal(c, s), "the defaults are already in range");
@@ -50,11 +51,14 @@ static void test_round_trip(void) {
     s.gap_ms = 250;
     s.interval_ms = 4000;
     s.op_mode = OpMode_Active;
-    char json[160];
+    s.feat[SCRL_F_LR] = 2;
+    s.feat[SCRL_F_RAND] = 0;
+    char json[SCRL_SETTINGS_JSON_MAX];
     size_t n = scrl_settings_to_json(s, json, sizeof(json));
     CHECK(n > 0 && n == strlen(json), "to_json returns the length");
     CHECK(strcmp(json, "{\"enabled\":true,\"mode\":1,\"pattern\":2,\"delay_ms\":1234,"
-                       "\"gap_ms\":250,\"interval_ms\":4000,\"op_mode\":1}") == 0,
+                       "\"gap_ms\":250,\"interval_ms\":4000,\"op_mode\":1,"
+                       "\"lr\":2,\"rand\":0}") == 0,
           "exact JSON text: %s", json);
     ScrlSettings back = scrl_settings_defaults();
     CHECK(parse(json, &back) == ScrlSettingsParse::Ok, "own JSON parses");
@@ -62,6 +66,55 @@ static void test_round_trip(void) {
 
     char small[20];
     CHECK(scrl_settings_to_json(s, small, sizeof(small)) == 0, "a small buffer returns 0");
+    // Too small for the last feature or for the closing brace only.
+    for (size_t cut = n - 8u; cut <= n; cut++) {
+        CHECK(scrl_settings_to_json(s, json, cut) == 0, "a buffer of %zu bytes returns 0", cut);
+    }
+    CHECK(scrl_settings_to_json(s, json, n + 1u) == n, "a buffer of exactly n + 1 bytes is enough");
+
+    // Every feature at 255 (worst case) still fits in SCRL_SETTINGS_JSON_MAX.
+    ScrlSettings big = s;
+    big.enabled = false;
+    big.delay_ms = big.gap_ms = big.interval_ms = 65535;
+    big.mode = big.pattern = big.op_mode = 255;
+    memset(big.feat, 255, sizeof(big.feat));
+    CHECK(scrl_settings_to_json(big, json, sizeof(json)) > 0, "the worst case fits");
+}
+
+static void test_features(void) {
+    ScrlSettings s = scrl_settings_defaults();
+    CHECK(parse("{\"lr\":1}", &s) == ScrlSettingsParse::Ok && s.feat[SCRL_F_LR] == 1, "lr 1");
+    CHECK(parse("{\"lr\":2,\"rand\":false}", &s) == ScrlSettingsParse::Ok &&
+              s.feat[SCRL_F_LR] == 2 && s.feat[SCRL_F_RAND] == 0, "lr 2, rand false");
+    CHECK(parse("{\"rand\":true}", &s) == ScrlSettingsParse::Ok && s.feat[SCRL_F_RAND] == 1,
+          "a 0/1 feature takes true");
+    ScrlSettings before = s;
+    CHECK(parse("{\"lr\":3}", &s) == ScrlSettingsParse::BadValue, "lr 3 (tilt) is not ported");
+    CHECK(parse("{\"lr\":true}", &s) == ScrlSettingsParse::BadValue, "lr is not a boolean");
+    CHECK(parse("{\"rand\":2}", &s) == ScrlSettingsParse::BadValue, "rand above 1");
+    CHECK(parse("{\"rand\":0,\"lr\":9}", &s) == ScrlSettingsParse::BadValue, "one bad value rejects all");
+    CHECK(scrl_settings_equal(s, before), "rejected writes change nothing");
+
+    // The clamp puts a stored value that is out of range back to the default.
+    s.feat[SCRL_F_LR] = 7;
+    s.feat[SCRL_F_RAND] = 5;
+    scrl_settings_clamp(&s);
+    CHECK(s.feat[SCRL_F_LR] == 0 && s.feat[SCRL_F_RAND] == 1, "clamp to the defaults");
+
+    // Board tick orders survive the clamp; other unknown patterns do not.
+    CHECK(parse("{\"pattern\":4}", &s) == ScrlSettingsParse::Ok && s.pattern == SCRL_PATTERN_ALTERNATE,
+          "pattern 4 (alternate)");
+    CHECK(parse("{\"pattern\":5}", &s) == ScrlSettingsParse::Ok && s.pattern == SCRL_PATTERN_RANDOM,
+          "pattern 5 (random)");
+    CHECK(parse("{\"pattern\":6}", &s) == ScrlSettingsParse::Ok && s.pattern == SCROLL_ACK_PATTERN_DOWN_UP,
+          "pattern 6 becomes -1 then +1");
+
+    // Every feature key is unique, fits the key buffer and is found by name.
+    for (int i = 0; i < (int)SCRL_F_COUNT; i++) {
+        CHECK(strlen(SCRL_FEATURE_DEFS[i].key) < SCRL_SETTINGS_KEY_MAX, "key %d fits", i);
+        CHECK(scrl_feature_find(SCRL_FEATURE_DEFS[i].key) == i, "key %d is unique", i);
+        CHECK(SCRL_FEATURE_DEFS[i].def <= SCRL_FEATURE_DEFS[i].max, "default %d in range", i);
+    }
 }
 
 static void test_partial_write(void) {
@@ -135,7 +188,8 @@ static void test_rejects(void) {
         {"{\"op_mode\":2}", ScrlSettingsParse::BadValue},
         {"{\"op_mode\":true}", ScrlSettingsParse::BadValue},
         {"{\"volume\":3}", ScrlSettingsParse::UnknownKey},
-        {"{\"a_very_long_key_name\":3}", ScrlSettingsParse::Syntax},
+        {"{\"a_key_name_longer_than_31_chars_x\":3}", ScrlSettingsParse::Syntax},
+        {"{\"a_very_long_key_name\":3}", ScrlSettingsParse::UnknownKey},
         // A good key first: the bad one must still reject the whole write.
         {"{\"gap_ms\":300,\"op_mode\":9}", ScrlSettingsParse::BadValue},
         {"{\"enabled\":true,\"nope\":1}", ScrlSettingsParse::UnknownKey},
@@ -216,6 +270,7 @@ int main(void) {
     printf("test_scrl_settings\n");
     test_defaults();
     test_round_trip();
+    test_features();
     test_partial_write();
     test_clamp();
     test_rejects();

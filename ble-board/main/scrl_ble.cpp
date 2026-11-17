@@ -180,7 +180,7 @@ static int read_live(struct os_mbuf *om) {
 }
 
 static int read_settings(struct os_mbuf *om) {
-    char json[160];
+    static char json[SCRL_SETTINGS_JSON_MAX];  // NimBLE host task only
     size_t n = scrl_settings_to_json(scrl_proc_get_settings(), json, sizeof(json));
     if (n == 0u) return BLE_ATT_ERR_UNLIKELY;
     return os_mbuf_append(om, json, (uint16_t)n) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
