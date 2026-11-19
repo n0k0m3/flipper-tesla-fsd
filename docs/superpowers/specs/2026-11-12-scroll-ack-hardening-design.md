@@ -112,7 +112,7 @@ Each value is drawn uniformly around its mean, per episode.
 |---|---|---|---|
 | Prompt delay (`scroll_ack_delay_ms`) | 0-5000 ms | 600 ms | +/-50 % |
 | Gap between ticks (`scroll_ack_gap_ms`) | 0-2000 ms | 100 ms | +/-50 % |
-| Timer interval (`scroll_ack_interval_ms`) | 1000-10000 ms | 2500 ms | +/-20 % (2.0-3.0 s, as measured on the TSL6) |
+| Timer interval (`scroll_ack_interval_ms`) | 1000-35000 ms (10000 before BLE board 0.3.2) | 2500 ms | +/-20 % (2.0-3.0 s, as measured on the TSL6) |
 
 Timer episodes are timed start to start. The second tick goes on the first idle
 native frame after its gap. Native page-1 frames come every 100 ms, so the real

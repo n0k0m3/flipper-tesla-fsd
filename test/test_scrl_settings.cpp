@@ -141,6 +141,9 @@ static void test_clamp(void) {
     CHECK(s.gap_ms == SCROLL_ACK_GAP_MAX_MS, "gap stops at the maximum: %u", s.gap_ms);
     CHECK(s.interval_ms == SCROLL_ACK_INTERVAL_MIN_MS, "interval stops at the minimum: %u",
           s.interval_ms);
+    // The longest TSL6 timer value (30-35 s) fits: the board keeps it.
+    CHECK(parse("{\"interval_ms\":32500}", &s) == ScrlSettingsParse::Ok, "TSL6 timer 8");
+    CHECK(s.interval_ms == 32500u, "a 32.5 s interval stays: %u", s.interval_ms);
     CHECK(parse("{\"interval_ms\":99999}", &s) == ScrlSettingsParse::Ok, "large interval");
     CHECK(s.interval_ms == SCROLL_ACK_INTERVAL_MAX_MS, "interval stops at the maximum: %u",
           s.interval_ms);

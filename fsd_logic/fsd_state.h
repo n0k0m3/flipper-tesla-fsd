@@ -46,7 +46,7 @@ typedef enum {
 #define SCROLL_ACK_GAP_MAX_MS          2000u
 #define SCROLL_ACK_INTERVAL_DEFAULT_MS 2500u  // Timer: episode start to start
 #define SCROLL_ACK_INTERVAL_MIN_MS     1000u
-#define SCROLL_ACK_INTERVAL_MAX_MS     10000u
+#define SCROLL_ACK_INTERVAL_MAX_MS     35000u  // TSL6 timer menu goes to 30-35 s
 
 typedef struct FSDState {
     TeslaHWVersion hw_version;
@@ -227,7 +227,7 @@ typedef struct FSDState {
     uint8_t scroll_ack_pattern;      // SCROLL_ACK_PATTERN_*, default DOWN_UP
     uint16_t scroll_ack_delay_ms;    // Prompt delay mean, 0-5000
     uint16_t scroll_ack_gap_ms;      // gap between the two ticks, mean, 0-2000
-    uint16_t scroll_ack_interval_ms; // Timer interval mean, 1000-10000
+    uint16_t scroll_ack_interval_ms; // Timer interval mean, 1000-35000
 
     // --- Configurable nag-context signal mapping (#122) ---
     // When cfg_das_id != 0, the RX path reads DAS_autopilotState + handsOnState
