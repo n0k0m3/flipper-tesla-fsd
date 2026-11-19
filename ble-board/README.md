@@ -97,6 +97,7 @@ In the car, use a charge-only cable.
 - Scroll Ack off.
 - Listen-Only.
 - Prompt mode, pattern `-1` then `+1`, delay 600 ms, gap 100 ms, interval 2500 ms.
+  Prompt mode acts on hands-on 3, 4 and 5. It sends one pair for each prompt level, and one more pair when the nag escalates (3 → 4 → 5), as the TSL6 prompt build v2. The owner tested levels 4 and 5 on the car with the TSL6 (2026-11-18). This firmware is not car-tested yet.
 - Left wheel (`lr` 0), random Timer interval (`rand` 1).
 
 ## Ported TSL6 settings
@@ -110,7 +111,7 @@ Since firmware 0.3.0 the board has some settings of the TSL6 module. Each one is
 | `pattern` 4, 5 | 4 alternate, 5 random | Tick order (TSL6 `jj` 2 and 3). 4 = the first tick changes direction each pair. 5 = a random first direction |
 
 A value above the maximum of a key is refused, not clamped. The values go in one NVS blob (`feat`), in the order of `SCRL_FEATURES` in `main/scrl_settings.h`. Add new keys only at the end.
-The shared `scroll_ack.h` of the T-2CAN does not change. `main/scrl_scroll_ext.h` changes the pattern before each step, moves a tick to the right wheel, and sets a fixed Timer interval.
+The board uses the shared `scroll_ack.h` of the T-2CAN as it is. `main/scrl_scroll_ext.h` changes the pattern before each step, moves a tick to the right wheel, and sets a fixed Timer interval.
 
 ## TX gates
 

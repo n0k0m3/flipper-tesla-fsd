@@ -4,7 +4,7 @@
  * TSL6 scroll settings. Header-only and free of ESP-IDF, so the host test
  * covers it (test/test_scrl_scroll_ext.cpp).
  *
- * scroll_ack.h stays the same as on the car-tested T-2CAN. This file changes
+ * scroll_ack.h is shared with the T-2CAN build. This file changes
  * only what goes in and what comes out of scroll_ack_step():
  *   - Tick order (setting "pattern" 4 and 5): before each step, pick DOWN_UP or
  *     UP_DOWN. scroll_ack_step() reads the pattern only for a first tick.

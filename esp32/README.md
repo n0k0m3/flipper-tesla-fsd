@@ -92,7 +92,7 @@ Most CAN protocol handling from hypery11's Flipper Zero implementation (`fsd_han
   - Track Mode (experimental) (adjustable rotation / stability / cooling via `0x313`)
   - Acceleration Mode (experimental) (Off / Chill / Standard / Performance pedal map on `0x334`, switches at standstill; shows the car's map and what goes out)
   - EU Charge-Port Type (experimental) (read-only charge-port type read-out always on; opt-in rewrite re-sends `0x25D` with `CP_type` = IEC CCS so EU Superchargers show in nav, behind a plug guard)
-  - Scroll Ack (experimental, HW4) (after `0x39B` reports AP state 6 + hands-on 3, copies the car's own idle `0x3C2` and sends one left-scroll pair −1/+1 per prompt, or every 2–3 s in Timer mode; only on the bus with `0x3C2` and no `0x370`, default OFF)
+  - Scroll Ack (experimental, HW4) (after `0x39B` reports AP state 6 + hands-on 3, 4 or 5, copies the car's own idle `0x3C2` and sends one left-scroll pair −1/+1 per prompt level, or every 2–3 s in Timer mode; only on the bus with `0x3C2` and no `0x370`, default OFF)
   - Hardware override selector (Auto-detect / Force HW4 / Force HW3 / Force Legacy)
 - **OTA Warning Banner** — pulsing red alert when vehicle OTA update is detected (same banner style for the in-car Autopark TX pause)
 - **CAN Errors** — combined controller error count with an RX missed / bus / TX fail split (mostly RX-queue drops on a busy bus, not failed sends)

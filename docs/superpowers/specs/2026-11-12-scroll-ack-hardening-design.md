@@ -92,7 +92,7 @@ reason in the diagnostics.
 
 | Mode | Value | When an episode starts |
 |---|---|---|
-| On prompt (default) | 0 | Hands-on state 3, after a random delay. One episode per prompt. It rearms after hands-on leaves 3. A prompt cleared during the delay sends nothing. A lost gate cancels the delay |
+| On prompt (default) | 0 | Hands-on state 3, 4 or 5, after a random delay. One episode per prompt level: a change of level after the episode (the nag escalates, for example 3 → 4) starts a new delay and one more episode. A change during the delay or the pair does not restart them. It rearms after hands-on leaves 3–5. A prompt cleared during the delay sends nothing. A lost gate cancels the delay. (Hands-on 4 and 5 and the escalation were added on 2026-11-18, from the TSL6 prompt build v2) |
 | Timer (TSL6) | 1 | While AP state is 6, one episode per interval, whatever the hands-on state. The first episode comes one interval after AP engages. A lost gate stops the timer, and it restarts with a full interval |
 
 ### Tick patterns (`scroll_ack_pattern`)
