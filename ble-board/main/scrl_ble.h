@@ -4,7 +4,8 @@
  *
  * One custom service, base UUID e591xxxx-51ba-4d0b-8422-5cb9dc778552:
  *   0001  service
- *   0002  Info         read                  JSON: version, build, board, chip, ID
+ *   0002  Info         read                  JSON: version, build, board, chip, ID,
+ *                                            imax = longest Timer interval in ms (0.3.2)
  *   0003  Status       read                  JSON, see scrl_status.h
  *   0004  Live         read, notify (1 Hz)   19 bytes, see scrl_status.h
  *   0005  Settings     read, write           JSON, see scrl_settings.h

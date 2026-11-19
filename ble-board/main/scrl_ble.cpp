@@ -150,12 +150,14 @@ static int read_info(struct os_mbuf *om) {
     int n = snprintf(json, sizeof(json),
                      "{\"fw\":\"%s\",\"build\":\"%s\",\"built\":\"%s %s\",\"idf\":\"%s\","
                      "\"board\":\"%s\",\"chip\":\"%s\",\"can\":\"%s\","
-                     "\"id\":\"%02x%02x%02x%02x%02x%02x\",\"rst_log\":[%u,%u,%u,%u]}",
+                     "\"id\":\"%02x%02x%02x%02x%02x%02x\",\"rst_log\":[%u,%u,%u,%u],"
+                     "\"imax\":%u}",
                      app->version, sha, app->date, app->time, app->idf_ver,
                      CONFIG_SCRL_BOARD_ID, CONFIG_IDF_TARGET, SCRL_CAN_KIND,
                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
                      (unsigned)boot->reset_log[0], (unsigned)boot->reset_log[1],
-                     (unsigned)boot->reset_log[2], (unsigned)boot->reset_log[3]);
+                     (unsigned)boot->reset_log[2], (unsigned)boot->reset_log[3],
+                     (unsigned)SCROLL_ACK_INTERVAL_MAX_MS);
     if (n <= 0 || (size_t)n >= sizeof(json)) return BLE_ATT_ERR_UNLIKELY;
     return os_mbuf_append(om, json, (uint16_t)n) == 0 ? 0 : BLE_ATT_ERR_INSUFFICIENT_RES;
 }
