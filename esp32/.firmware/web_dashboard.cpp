@@ -741,7 +741,7 @@ input:checked+.sl2:before{transform:translateX(20px);background:#fff}
       <label class="sw"><input type="checkbox" id="swScrollAck" onchange="cmd('scroll_ack',this.checked)"><span class="sl2"></span></label>
     </div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
-      <span class="lbl"><small style="color:var(--muted)">Mode. On prompt: ticks when the hands-on prompt shows (AP 6 + hands-on 3), after the delay below. Timer: ticks every interval while AP is on, like the TSL6; the prompt never shows.</small></span>
+      <span class="lbl"><small style="color:var(--muted)">Mode. On prompt: ticks when the hands-on prompt shows (AP 6 + hands-on 3, 4 or 5), after the delay below, and again when the nag escalates. Timer: ticks every interval while AP is on, like the TSL6; the prompt never shows.</small></span>
       <select id="selScrollMode" onchange="cmd('scroll_ack_mode',parseInt(this.value,10))">
         <option value="0">On prompt</option>
         <option value="1">Timer (TSL6)</option>

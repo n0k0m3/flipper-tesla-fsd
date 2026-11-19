@@ -1700,7 +1700,7 @@ static NOINLINE void process_frame(CanBusId bus, const CanFrame &frame) {
     state_exit();
 
     // Scroll Ack (0x3C2 left ticks, HW4-only) — copy the car's own idle page-1
-    // frame and send a left -1/+1 pair: once per prompt (AP 6 + hands-on 3) in
+    // frame and send a left -1/+1 pair: once per prompt level (AP 6 + hands-on 3-5) in
     // Prompt mode, or every 2-3 s while AP 6 in Timer mode. Only on a bus with
     // no recent 0x370 (Vehicle CAN); each tick goes back on the bus it came from.
     if (frame.id == CAN_ID_VCLEFT_SWITCH) {

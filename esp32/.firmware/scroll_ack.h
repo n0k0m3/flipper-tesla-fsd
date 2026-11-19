@@ -9,12 +9,21 @@
  *   (default), +1 then -1, +1 once, or -1 once. The second tick of a pair goes on
  *   the first idle native frame after a random gap (mean scroll_ack_gap_ms,
  *   +/-50 %). Two modes (FSDState.scroll_ack_mode) decide when ticks start:
- *   - Prompt (0, default): when fresh HW4 0x39B reports AP state 6 and
- *     hands-on state 3 (the visible prompt), after a random delay (mean
- *     scroll_ack_delay_ms, +/-50 %). One episode per state-3 prompt; it rearms
- *     after hands-on leaves 3. A prompt cleared during the delay sends
- *     nothing. Owner captures (2026-11-11) show one manual left tick changing
- *     hands-on from 3 to 1 in about 33 ms.
+ *   - Prompt (0, default): when fresh HW4 0x39B reports AP state 6 and a
+ *     hands-on prompt, after a random delay (mean scroll_ack_delay_ms,
+ *     +/-50 %). A prompt is hands-on 3 (REQD_VISUAL, the visible prompt),
+ *     4 (REQD_CHIME_1) or 5 (REQD_CHIME_2). One episode per prompt level:
+ *     if the level changes after the episode (for example 3 -> 4, the nag
+ *     escalates to the chime), that is a new prompt with a new delay and one
+ *     more episode. A level change during the delay or the pair does not
+ *     restart them. It rearms after hands-on leaves 3-5. A prompt cleared
+ *     during the delay sends nothing. Rules from the TSL6 prompt build v2
+ *     (car-tested 2026-11-17), with two differences: the level is latched at
+ *     the first tick (the TSL6 compares frame to frame), and a level change
+ *     while a gate is down still gives a pair when the gate opens. Owner captures
+ *     (2026-11-11) show one manual left tick changing hands-on from 3 to 1 in
+ *     about 33 ms. The TSL6 v2 rules for levels 4 and 5 were tested on the
+ *     car (owner, 2026-11-18). This file is not car-tested yet.
  *   - Timer (1, TSL6 pattern): while AP state is 6, one episode every
  *     scroll_ack_interval_ms +/-20 % (default 2.0-3.0 s),
  *     whatever the hands-on state. The first pair comes one interval after AP
@@ -79,6 +88,10 @@
 // A bus that showed 0x370 this recently is not Vehicle CAN.
 #define SCROLL_ACK_EPAS_WINDOW_MS 2000u
 #define SCROLL_ACK_BUS_COUNT 2u
+// DAS_autopilotHandsOnState values that are a prompt (opendbc tesla_model3_party):
+// 3 REQD_VISUAL, 4 REQD_CHIME_1, 5 REQD_CHIME_2.
+#define SCROLL_ACK_PROMPT_FIRST 3u
+#define SCROLL_ACK_PROMPT_LAST 5u
 
 // Episode phase. A zero-initialised runtime starts Armed.
 enum class ScrollAckPhase : uint8_t { Armed, Delay, SecondPending, EpisodeDone };
@@ -113,6 +126,7 @@ struct ScrollAckRuntime {
     bool last_tx_allowed;
     uint32_t sent_count;       // successful ticks sent, diagnostics
     uint32_t pairs_aborted;    // first tick sent, balancing tick not sent
+    uint8_t prompt_level;      // Prompt: hands-on value at the last first tick
 };
 
 // A consistent snapshot of the TX gates for one native frame.
@@ -207,6 +221,11 @@ static inline void scroll_ack_clamp_settings(FSDState *state) {
         state->scroll_ack_interval_ms = SCROLL_ACK_INTERVAL_MIN_MS;
     if (state->scroll_ack_interval_ms > SCROLL_ACK_INTERVAL_MAX_MS)
         state->scroll_ack_interval_ms = SCROLL_ACK_INTERVAL_MAX_MS;
+}
+
+// True when a hands-on value is a prompt (3, 4 or 5).
+static inline bool scroll_ack_is_prompt(uint8_t hands_on) {
+    return hands_on >= SCROLL_ACK_PROMPT_FIRST && hands_on <= SCROLL_ACK_PROMPT_LAST;
 }
 
 // Wrap-safe "now is at or after due".
@@ -425,8 +444,16 @@ static inline ScrollAckAction scroll_ack_step(ScrollAckRuntime *runtime,
             input.interval_mean_ms, SCROLL_ACK_INTERVAL_SPREAD_PCT, input.rand);
     } else {
         // Prompt mode. A cleared prompt rearms a finished or waiting episode.
-        if (runtime->das39b_hands_on != 3u &&
+        bool prompt = scroll_ack_is_prompt(runtime->das39b_hands_on);
+        if (!prompt &&
             (runtime->phase == ScrollAckPhase::EpisodeDone || runtime->phase == ScrollAckPhase::Delay)) {
+            runtime->phase = ScrollAckPhase::Armed;
+        }
+        // A finished episode and a prompt at a different level (the nag
+        // escalated, for example 3 -> 4): that is a new prompt. A change during
+        // the delay or the pair does not get here, so it does not restart them.
+        if (prompt && runtime->phase == ScrollAckPhase::EpisodeDone &&
+            runtime->das39b_hands_on != runtime->prompt_level) {
             runtime->phase = ScrollAckPhase::Armed;
         }
         if (block != ScrollAckBlock::None) {
@@ -436,11 +463,12 @@ static inline ScrollAckAction scroll_ack_step(ScrollAckRuntime *runtime,
             return ScrollAckAction::None;
         }
         if (runtime->phase == ScrollAckPhase::EpisodeDone) {
-            // Ticks already sent for this prompt; wait until hands-on leaves 3.
+            // Ticks already sent for this prompt level; wait until hands-on
+            // leaves 3-5 or changes level.
             runtime->last_block = ScrollAckBlock::EpisodeDone;
             return ScrollAckAction::None;
         }
-        if (runtime->das39b_hands_on != 3u) {
+        if (!prompt) {
             runtime->last_block = ScrollAckBlock::DasHandsOn;
             return ScrollAckAction::None;
         }
@@ -459,6 +487,9 @@ static inline ScrollAckAction scroll_ack_step(ScrollAckRuntime *runtime,
             runtime->last_block = ScrollAckBlock::NativeIdle;
             return ScrollAckAction::None;
         }
+        // The episode belongs to the level at its first tick. A level change
+        // during the delay is part of this episode, not a new prompt.
+        runtime->prompt_level = runtime->das39b_hands_on;
     }
 
     uint8_t first = 0u;

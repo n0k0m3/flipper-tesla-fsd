@@ -32,7 +32,7 @@ typedef enum {
 #define ACCEL_MODE_PERFORMANCE 3u
 
 // Scroll Ack trigger modes (FSDState.scroll_ack_mode).
-#define SCROLL_ACK_MODE_PROMPT 0u   // one pair per hands-on prompt (AP 6 + hands-on 3)
+#define SCROLL_ACK_MODE_PROMPT 0u   // one pair per prompt level (AP 6 + hands-on 3, 4 or 5)
 #define SCROLL_ACK_MODE_TIMER  1u   // TSL6 pattern: one pair every 2-3 s while AP 6
 // Scroll Ack tick patterns (FSDState.scroll_ack_pattern). Left wheel = volume.
 #define SCROLL_ACK_PATTERN_DOWN_UP   0u  // -1 then +1 (default, TSL6)
@@ -219,7 +219,8 @@ typedef struct FSDState {
     // Opt-in. Emit left-scroll pairs (-1 then +1) by copying the car's own idle
     // page-1 0x3C2 frame, only on a bus with no recent 0x370 (Vehicle CAN).
     // scroll_ack_mode picks the trigger: Prompt = one pair when fresh HW4 0x39B
-    // reports AP state 6 + hands-on 3; Timer = one pair every 2-3 s while AP 6.
+    // reports AP state 6 + hands-on 3, 4 or 5, and one more pair when the level
+    // changes (the nag escalates); Timer = one pair every 2-3 s while AP 6.
     // The episode runtime lives in main.cpp (ScrollAckRuntime), not here.
     bool scroll_ack;                 // master opt-in, default OFF
     uint8_t scroll_ack_mode;         // SCROLL_ACK_MODE_PROMPT (default) / _TIMER

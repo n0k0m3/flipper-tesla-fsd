@@ -113,22 +113,163 @@ static void test_pair_bytes_on_prompt(void) {
 
 static void test_trigger_values(void) {
     CanFrame out;
-    for (uint8_t ho = 0; ho <= 4; ho++) {
-        if (ho == 3) continue;
+    // Every DAS_autopilotHandsOnState value: 3, 4 and 5 are a prompt.
+    const uint8_t values[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 15};
+    for (unsigned i = 0; i < sizeof(values); i++) {
+        uint8_t ho = values[i];
+        bool prompt = ho >= 3u && ho <= 5u;
+        CHECK(scroll_ack_is_prompt(ho) == prompt, "is_prompt(%u)", ho);
         ScrollAckRuntime r = blank_runtime();
         ScrollAckInput in = good_input();
-        CHECK(feed(&r, in, 1000, &out, 6, ho) == ScrollAckAction::None,
-              "AP 6 hands-on %u -> no tick", ho);
-        CHECK(r.last_block == ScrollAckBlock::DasHandsOn, "hands-on reason");
+        ScrollAckAction act = feed(&r, in, 1000, &out, 6, ho);
+        if (prompt) {
+            CHECK(act == ScrollAckAction::FirstTick, "AP 6 hands-on %u -> tick", ho);
+            CHECK(r.prompt_level == ho, "level %u latched, got %u", ho, r.prompt_level);
+        } else {
+            CHECK(act == ScrollAckAction::None, "AP 6 hands-on %u -> no tick", ho);
+            CHECK(r.last_block == ScrollAckBlock::DasHandsOn, "hands-on reason");
+        }
     }
     const uint8_t states[] = {0, 1, 2, 3, 5, 7};
     for (unsigned i = 0; i < sizeof(states); i++) {
-        ScrollAckRuntime r = blank_runtime();
-        ScrollAckInput in = good_input();
-        CHECK(feed(&r, in, 1000, &out, states[i], 3) == ScrollAckAction::None,
-              "AP state %u hands-on 3 -> no tick", states[i]);
-        CHECK(r.last_block == ScrollAckBlock::DasApState, "AP state reason");
+        for (uint8_t ho = 3; ho <= 5; ho++) {
+            ScrollAckRuntime r = blank_runtime();
+            ScrollAckInput in = good_input();
+            CHECK(feed(&r, in, 1000, &out, states[i], ho) == ScrollAckAction::None,
+                  "AP state %u hands-on %u -> no tick", states[i], ho);
+            CHECK(r.last_block == ScrollAckBlock::DasApState, "AP state reason");
+        }
     }
+}
+
+// Send one full -1/+1 pair at `t` and `t` + 100 with hands-on `ho` (gap 0).
+static void send_pair(ScrollAckRuntime *r, const ScrollAckInput &in, uint32_t t, uint8_t ho) {
+    CanFrame out;
+    CHECK(feed(r, in, t, &out, 6, ho) == ScrollAckAction::FirstTick, "pair at %u: first", t);
+    scroll_ack_complete(r, ScrollAckAction::FirstTick, true);
+    CHECK(feed(r, in, t + 100u, &out, 6, ho) == ScrollAckAction::SecondTick,
+          "pair at %u: second", t);
+    scroll_ack_complete(r, ScrollAckAction::SecondTick, true);
+    CHECK(r->phase == ScrollAckPhase::EpisodeDone, "pair at %u: done", t);
+}
+
+// The nag escalates 3 -> 4 -> 5 and the ticks do not clear it: one more pair
+// for each level, each after a new delay (TSL6 prompt build v2).
+static void test_escalation_new_pair_per_level(void) {
+    ScrollAckRuntime r = blank_runtime();
+    ScrollAckInput in = good_input();
+    CanFrame out;
+    send_pair(&r, in, 1000, 3);
+    for (uint32_t t = 1200; t <= 3000; t += 100) {
+        CHECK(feed(&r, in, t, &out, 6, 3) == ScrollAckAction::None, "same level 3 at %u", t);
+    }
+    CHECK(r.last_block == ScrollAckBlock::EpisodeDone, "same level waits");
+
+    in.delay_mean_ms = 600;
+    in.rand = 0;  // shortest draw: 300 ms
+    CHECK(feed(&r, in, 3100, &out, 6, 4) == ScrollAckAction::None, "3 -> 4 starts a delay");
+    CHECK(r.phase == ScrollAckPhase::Delay && r.next_due_ms == 3400u,
+          "new delay due at 3400, got %u", r.next_due_ms);
+    CHECK(feed(&r, in, 3300, &out, 6, 4) == ScrollAckAction::None, "not due at 3300");
+    in.delay_mean_ms = 0;
+    send_pair(&r, in, 3400, 4);
+    CHECK(r.prompt_level == 4u, "level 4 latched");
+    CHECK(feed(&r, in, 3600, &out, 6, 4) == ScrollAckAction::None, "same level 4: no retry");
+
+    send_pair(&r, in, 3700, 5);
+    CHECK(r.prompt_level == 5u, "level 5 latched");
+    CHECK(feed(&r, in, 3900, &out, 6, 5) == ScrollAckAction::None, "same level 5: no retry");
+    CHECK(r.sent_count == 6u, "three pairs, got %u ticks", r.sent_count);
+
+    // 5 -> 6 (REQD_SLOWING) is not a prompt: rearm, no tick.
+    CHECK(feed(&r, in, 4000, &out, 6, 6) == ScrollAckAction::None, "5 -> 6 no tick");
+    CHECK(r.phase == ScrollAckPhase::Armed, "5 -> 6 rearms");
+
+    // Any change of level counts, also down (TSL6 compares with the last level).
+    r = blank_runtime();
+    send_pair(&r, in, 1000, 4);
+    send_pair(&r, in, 1300, 3);
+}
+
+// A level change during the delay keeps the delay: one pair, then nothing at
+// the same level.
+static void test_escalation_during_delay(void) {
+    ScrollAckRuntime r = blank_runtime();
+    ScrollAckInput in = good_input();
+    in.delay_mean_ms = 600;
+    in.rand = 0;  // 300 ms
+    CanFrame out;
+    CHECK(feed(&r, in, 1000, &out, 6, 3) == ScrollAckAction::None, "prompt 3 starts the delay");
+    CHECK(feed(&r, in, 1100, &out, 6, 4) == ScrollAckAction::None, "3 -> 4 during the delay");
+    CHECK(r.phase == ScrollAckPhase::Delay && r.next_due_ms == 1300u,
+          "delay kept, due %u", r.next_due_ms);
+    CHECK(feed(&r, in, 1300, &out, 6, 4) == ScrollAckAction::FirstTick, "one pair at 1300");
+    CHECK(r.prompt_level == 4u, "episode belongs to level 4");
+    scroll_ack_complete(&r, ScrollAckAction::FirstTick, true);
+    CHECK(feed(&r, in, 1400, &out, 6, 4) == ScrollAckAction::SecondTick, "+1");
+    scroll_ack_complete(&r, ScrollAckAction::SecondTick, true);
+    for (uint32_t t = 1500; t <= 3000; t += 100) {
+        CHECK(feed(&r, in, t, &out, 6, 4) == ScrollAckAction::None, "level 4 at %u: nothing", t);
+    }
+}
+
+// Cases only this state machine has: the pair, failed sends, single ticks.
+static void test_escalation_pair_and_failures(void) {
+    CanFrame out;
+
+    // A level change between the two ticks: the pair ends first, then a new episode.
+    ScrollAckRuntime r = blank_runtime();
+    ScrollAckInput in = good_input();
+    feed(&r, in, 1000, &out, 6, 3);
+    scroll_ack_complete(&r, ScrollAckAction::FirstTick, true);
+    CHECK(feed(&r, in, 1100, &out, 6, 4) == ScrollAckAction::SecondTick,
+          "3 -> 4 in the gap: +1 still comes");
+    CHECK(data_is(out, "2955010000000080"), "balancing +1, not a new -1");
+    scroll_ack_complete(&r, ScrollAckAction::SecondTick, true);
+    CHECK(feed(&r, in, 1200, &out, 6, 4) == ScrollAckAction::FirstTick,
+          "after the pair: level 4 is a new prompt");
+
+    // A failed first tick: no retry at the same level, a new episode at the next level.
+    r = blank_runtime();
+    feed(&r, in, 1000, &out, 6, 3);
+    scroll_ack_complete(&r, ScrollAckAction::FirstTick, false);
+    CHECK(feed(&r, in, 1100, &out, 6, 3) == ScrollAckAction::None, "failed -1: no retry at 3");
+    CHECK(feed(&r, in, 1200, &out, 6, 4) == ScrollAckAction::FirstTick, "escalation -> new -1");
+
+    // An aborted pair: a new episode at the next level.
+    r = blank_runtime();
+    feed(&r, in, 1000, &out, 6, 3);
+    scroll_ack_complete(&r, ScrollAckAction::FirstTick, true);
+    CHECK(feed(&r, in, 1100, &out, 2, 3) == ScrollAckAction::None, "AP drop aborts the pair");
+    CHECK(r.phase == ScrollAckPhase::EpisodeDone && r.pairs_aborted == 1u, "pair aborted");
+    CHECK(feed(&r, in, 1200, &out, 6, 3) == ScrollAckAction::None, "same level: no retry");
+    CHECK(feed(&r, in, 1300, &out, 6, 4) == ScrollAckAction::FirstTick, "escalation -> new pair");
+
+    // A single-tick pattern: one tick per level.
+    r = blank_runtime();
+    in.pattern = SCROLL_ACK_PATTERN_UP_ONCE;
+    CHECK(feed(&r, in, 1000, &out, 6, 3) == ScrollAckAction::FirstTick, "up once at 3");
+    scroll_ack_complete(&r, ScrollAckAction::FirstTick, true);
+    CHECK(r.phase == ScrollAckPhase::EpisodeDone, "single tick ends the episode");
+    CHECK(feed(&r, in, 1100, &out, 6, 3) == ScrollAckAction::None, "no more at 3");
+    CHECK(feed(&r, in, 1200, &out, 6, 4) == ScrollAckAction::FirstTick, "up once at 4");
+    scroll_ack_complete(&r, ScrollAckAction::FirstTick, true);
+    CHECK(feed(&r, in, 1300, &out, 6, 4) == ScrollAckAction::None, "no more at 4");
+
+    // A level change while a gate is down: the new episode waits for the gate.
+    r = blank_runtime();
+    in.pattern = SCROLL_ACK_PATTERN_DOWN_UP;
+    send_pair(&r, in, 1000, 3);
+    CHECK(feed(&r, in, 1200, &out, 2, 4) == ScrollAckAction::None, "AP not 6 at level 4");
+    CHECK(r.last_block == ScrollAckBlock::DasApState, "blocked by AP state");
+    CHECK(feed(&r, in, 1300, &out, 6, 4) == ScrollAckAction::FirstTick, "AP back -> pair at 4");
+
+    // Timer mode ignores the levels: no extra pair on an escalation.
+    r = blank_runtime();
+    in = timer_input();
+    feed(&r, in, 1000, &out, 6, 3);
+    CHECK(feed(&r, in, 1100, &out, 6, 4) == ScrollAckAction::None, "Timer: 3 -> 4 no tick");
+    CHECK(feed(&r, in, 1200, &out, 6, 5) == ScrollAckAction::None, "Timer: 4 -> 5 no tick");
 }
 
 static void test_one_pair_per_prompt_and_rearm(void) {
@@ -333,7 +474,7 @@ static void test_send_failures(void) {
     scroll_ack_complete(&r, ScrollAckAction::FirstTick, false);
     CHECK(r.phase == ScrollAckPhase::EpisodeDone && r.sent_count == 0u,
           "failed -1: no +1, no count, no retry");
-    CHECK(feed(&r, in, 1100, &out) == ScrollAckAction::None, "no retry while hands-on 3");
+    CHECK(feed(&r, in, 1100, &out) == ScrollAckAction::None, "no retry at the same level");
 
     r = blank_runtime();
     feed(&r, in, 1000, &out);
@@ -657,6 +798,9 @@ int main(void) {
     test_pair_bytes_on_prompt();
     test_trigger_values();
     test_one_pair_per_prompt_and_rearm();
+    test_escalation_new_pair_per_level();
+    test_escalation_during_delay();
+    test_escalation_pair_and_failures();
     test_das_required_and_fresh();
     test_das_ingest_any_bus();
     test_vehicle_bus_rule();
