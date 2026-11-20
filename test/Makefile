@@ -82,6 +82,9 @@ SCRL_DEPS := $(ESP32)/scroll_ack.h $(ESP32)/can_driver.h $(ESP32)/fsd_handler.h 
 test_scrl_settings: test_scrl_settings.cpp $(BLEBOARD)/scrl_settings.h $(BLEBOARD)/scrl_passkey.h $(SCRL_DEPS)
 	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) -I$(ESP32) -I$(ROOT)/fsd_logic test_scrl_settings.cpp -o $@
 
+test_scrl_capture: test_scrl_capture.cpp $(BLEBOARD)/scrl_capture.h
+	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) test_scrl_capture.cpp -o $@
+
 test_scrl_scroll_ext: test_scrl_scroll_ext.cpp $(BLEBOARD)/scrl_scroll_ext.h $(BLEBOARD)/scrl_settings.h $(SCRL_DEPS)
 	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) -I$(ESP32) -I$(ROOT)/fsd_logic test_scrl_scroll_ext.cpp -o $@
 
@@ -94,10 +97,10 @@ test_scrl_status: test_scrl_status.cpp scrl_sample.h $(BLEBOARD)/scrl_status.h $
 # scrl_vectors prints what the BLE board packers make and what its settings
 # reader accepts. The control app (repo tsl6-webble, tools/scrl-fixture.mjs)
 # runs it to check itself against this firmware. It is a tool, not a test.
-scrl_vectors: scrl_vectors.cpp scrl_sample.h $(BLEBOARD)/scrl_status.h $(BLEBOARD)/scrl_settings.h $(BLEBOARD)/scrl_passkey.h $(BLEBOARD)/scrl_ble.h $(SCRL_DEPS)
+scrl_vectors: scrl_vectors.cpp scrl_sample.h $(BLEBOARD)/scrl_capture.h $(BLEBOARD)/scrl_status.h $(BLEBOARD)/scrl_settings.h $(BLEBOARD)/scrl_passkey.h $(BLEBOARD)/scrl_ble.h $(SCRL_DEPS)
 	$(CXX) $(CXXFLAGS) -I$(BLEBOARD) -I$(ESP32) -I$(ROOT)/fsd_logic scrl_vectors.cpp -o $@
 
-check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe test_can_mcp2518fd test_web_cmd test_web_origin test_can_counters test_loop_health test_power_log test_page_send test_rx_whitelist test_scroll_ack test_scrl_settings test_scrl_status test_scrl_spi test_scrl_scroll_ext
+check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe test_can_mcp2518fd test_web_cmd test_web_origin test_can_counters test_loop_health test_power_log test_page_send test_rx_whitelist test_scroll_ack test_scrl_settings test_scrl_status test_scrl_spi test_scrl_scroll_ext test_scrl_capture
 	./test_fsd_core
 	./test_esp32_core
 	./test_can_capture_filter
@@ -115,9 +118,10 @@ check: test_fsd_core test_esp32_core test_can_capture_filter test_captive_probe 
 	./test_scrl_status
 	./test_scrl_spi
 	./test_scrl_scroll_ext
+	./test_scrl_capture
 	CXX="$(CXX)" python3 test_web_page.py
 
 clean:
-	rm -rf test_fsd_core test_fsd_core.dSYM test_esp32_core test_esp32_core.dSYM test_can_capture_filter test_can_capture_filter.dSYM test_captive_probe test_captive_probe.dSYM test_can_mcp2518fd test_can_mcp2518fd.dSYM test_web_cmd test_web_cmd.dSYM test_web_origin test_web_origin.dSYM test_can_counters test_can_counters.dSYM test_loop_health test_loop_health.dSYM test_power_log test_power_log.dSYM test_page_send test_page_send.dSYM test_rx_whitelist test_rx_whitelist.dSYM test_scroll_ack test_scroll_ack.dSYM test_scrl_settings test_scrl_settings.dSYM test_scrl_status test_scrl_status.dSYM test_scrl_spi test_scrl_spi.dSYM test_scrl_scroll_ext test_scrl_scroll_ext.dSYM scrl_vectors scrl_vectors.dSYM
+	rm -rf test_fsd_core test_fsd_core.dSYM test_esp32_core test_esp32_core.dSYM test_can_capture_filter test_can_capture_filter.dSYM test_captive_probe test_captive_probe.dSYM test_can_mcp2518fd test_can_mcp2518fd.dSYM test_web_cmd test_web_cmd.dSYM test_web_origin test_web_origin.dSYM test_can_counters test_can_counters.dSYM test_loop_health test_loop_health.dSYM test_power_log test_power_log.dSYM test_page_send test_page_send.dSYM test_rx_whitelist test_rx_whitelist.dSYM test_scroll_ack test_scroll_ack.dSYM test_scrl_settings test_scrl_settings.dSYM test_scrl_status test_scrl_status.dSYM test_scrl_spi test_scrl_spi.dSYM test_scrl_scroll_ext test_scrl_scroll_ext.dSYM test_scrl_capture test_scrl_capture.dSYM scrl_vectors scrl_vectors.dSYM
 
 .PHONY: check clean
