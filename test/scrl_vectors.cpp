@@ -19,6 +19,7 @@
 #include <string>
 
 #include "scrl_ble.h"  // SCRL_CMD_SET_PASSKEY
+#include "scrl_capture.h"
 #include "scrl_passkey.h"
 #include "scrl_sample.h"
 #include "scrl_settings.h"
@@ -92,8 +93,39 @@ static int print_fixtures(void) {
            (unsigned)SCROLL_ACK_DELAY_MAX_MS, (unsigned)SCROLL_ACK_GAP_MAX_MS,
            (unsigned)SCROLL_ACK_INTERVAL_MIN_MS, (unsigned)SCROLL_ACK_INTERVAL_MAX_MS,
            (unsigned)SCROLL_ACK_MODE_TIMER, (unsigned)SCROLL_ACK_PATTERN_DOWN_ONCE);
-    printf(",\"status_max\":%u,\"live_len\":%u}\n", (unsigned)SCRL_STATUS_JSON_MAX,
+    printf(",\"status_max\":%u,\"live_len\":%u", (unsigned)SCRL_STATUS_JSON_MAX,
            (unsigned)SCRL_LIVE_RECORD_LEN);
+
+    // Capture packets from fixed frames (synthetic data), at an iPhone MTU.
+    static ScrlCapture cap;
+    static const uint8_t d1[8] = {1, 2, 3, 4, 5, 6, 7, 8};
+    static const uint8_t d2[4] = {0xA0, 0xB1, 0xC2, 0xD3};
+    scrl_cap_start(&cap, SCRL_CAP_MODE_PLAN, nullptr, 0);
+    scrl_cap_feed(&cap, 0x3C2, false, 8, d1, 100);
+    scrl_cap_feed(&cap, 0x155, false, 8, d1, 120);   // ID table only
+    scrl_cap_feed(&cap, 0x118, false, 4, d2, 150);
+    scrl_cap_feed(&cap, 0x1234567, true, 8, d1, 160);  // extended: counted only
+    uint8_t pkt[182];
+    uint8_t n = 0;
+    uint32_t next = 0;
+    size_t len = scrl_cap_pack_frames(&cap, pkt, sizeof(pkt), &n);
+    scrl_cap_commit(&cap, n);
+    printf(",\"capture\":{\"mtu\":185,\"plan_count\":%u,\"frames_hex\":", (unsigned)SCRL_CAP_PLAN_COUNT);
+    put_hex(pkt, len);
+    len = scrl_cap_pack_ids(&cap, 0, pkt, sizeof(pkt), &next);
+    scrl_cap_sent(&cap);
+    printf(",\"ids_hex\":");
+    put_hex(pkt, len);
+    len = scrl_cap_pack_mark(&cap, 3, 777, pkt);
+    scrl_cap_sent(&cap);
+    printf(",\"mark_hex\":");
+    put_hex(pkt, len);
+    len = scrl_cap_pack_state(&cap, 1000, 5, pkt);
+    printf(",\"state_hex\":");
+    put_hex(pkt, len);
+    printf(",\"modes\":{\"plan\":%u,\"all\":%u,\"list\":%u},\"list_max\":%u}}\n",
+           (unsigned)SCRL_CAP_MODE_PLAN, (unsigned)SCRL_CAP_MODE_ALL, (unsigned)SCRL_CAP_MODE_LIST,
+           (unsigned)SCRL_CAP_LIST_MAX);
     return 0;
 }
 
