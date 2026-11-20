@@ -107,7 +107,7 @@ static void test_feed_and_packets(void) {
     CHECK(len == 16u && pkt[0] == SCRL_CAP_MARK && get32(&pkt[8]) == 12345u && pkt[12] == 7u, "mark");
     len = scrl_cap_pack_state(&g_cap, 999, 42, pkt);
     CHECK(len == 28u && pkt[0] == SCRL_CAP_STATE && get32(&pkt[8]) == 999u && pkt[12] == 1u && pkt[13] == 0u &&
-              pkt[14] == 2u && get32(&pkt[16]) == 4u && get32(&pkt[20]) == 42u && get32(&pkt[24]) == 1u,
+              get16(&pkt[14]) == 2u && get32(&pkt[16]) == 4u && get32(&pkt[20]) == 42u && get32(&pkt[24]) == 1u,
           "state");
     scrl_cap_stop(&g_cap);
     feed(0x3C2, 300, 0x01);
@@ -134,9 +134,13 @@ static void test_ring_full(void) {
     CHECK(get32(&pkt[4]) == 5u, "the header carries ring_lost");
     // The ID table stops at its size and the stream goes on.
     scrl_cap_start(&g_cap, SCRL_CAP_MODE_ALL, nullptr, 0);
-    for (uint32_t id = 0; id < 300u; id++) feed(id, id, 0);
+    for (uint32_t id = 0; id < 600u; id++) feed(id, id, 0);
+    CHECK(SCRL_CAP_MAX_IDS > 255u, "more than 255 IDs: the car bus has more (capture 2026-11-20)");
     CHECK(g_cap.id_count.load() == SCRL_CAP_MAX_IDS, "table holds %u IDs", (unsigned)SCRL_CAP_MAX_IDS);
-    CHECK(scrl_cap_pending(&g_cap) == 300u, "all 300 frames stream");
+    CHECK(scrl_cap_pending(&g_cap) == 600u, "all 600 frames stream");
+    uint8_t st[32];
+    scrl_cap_pack_state(&g_cap, 0, 0, st);
+    CHECK(get16(&st[14]) == SCRL_CAP_MAX_IDS, "the state carries the ID count as u16: %u", get16(&st[14]));
 }
 
 // A bus of 2000 frames/s for 20 s: 100 IDs, the 27 plan IDs among them. The

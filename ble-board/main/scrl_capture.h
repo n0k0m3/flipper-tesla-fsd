@@ -28,7 +28,8 @@
  *     id u16, dlc u8, 0 u8, frames u32, first_ms u32, last_ms u32, data[8]
  *   type 3 MARK    one record: t_ms u32, step u8, 0 u8 x3
  *   type 4 STATE   one record of 20 bytes:
- *     t_ms u32, running u8, mode u8, ids u8 (ID table entries), 0 u8,
+ *     t_ms u32, running u8, mode u8, ids u16 (ID table entries; 0.4.0 sent
+ *     u8 and 0, so the same read works),
  *     rx_all u32 (frames that the capture saw), rx_queue_lost u32 (frames that
  *     the CAN task queue lost since power-on), ext u32 (extended-ID frames,
  *     counted only)
@@ -47,7 +48,7 @@
 #define SCRL_CAP_MARK_LEN     8u
 #define SCRL_CAP_STATE_LEN    20u
 #define SCRL_CAP_RING         2048u  // records, a power of 2: 32 KB, about 4 s at 500 frames/s
-#define SCRL_CAP_MAX_IDS      255u   // ID table entries (index 0xFF = none)
+#define SCRL_CAP_MAX_IDS      511u   // ID table entries (index 0xFFFF = none). A Model 3/Y Vehicle CAN has more than 255 IDs
 #define SCRL_CAP_LIST_MAX     64u    // IDs in a start command with an ID list
 #define SCRL_CAP_STD_IDS      2048u
 
@@ -86,7 +87,7 @@ struct ScrlCapture {
     std::atomic<bool> running;
     uint8_t mode;
     uint8_t stream[SCRL_CAP_STD_IDS / 8u];  // bit set = stream this ID
-    uint8_t index[SCRL_CAP_STD_IDS];        // ID -> table entry, 0xFF = none
+    uint16_t index[SCRL_CAP_STD_IDS];       // ID -> table entry, 0xFFFF = none
     ScrlCapIdEntry ids[SCRL_CAP_MAX_IDS];
     std::atomic<uint32_t> id_count;
     uint8_t ring[SCRL_CAP_RING][SCRL_CAP_REC_LEN];
@@ -170,11 +171,11 @@ static inline void scrl_cap_feed(ScrlCapture *c, uint32_t id, bool ext, uint8_t 
     }
     if (dlc > 8u) dlc = 8u;
 
-    uint8_t k = c->index[id];
-    if (k == 0xFFu) {
+    uint16_t k = c->index[id];
+    if (k == 0xFFFFu) {
         uint32_t n = c->id_count.load(std::memory_order_relaxed);
         if (n < SCRL_CAP_MAX_IDS) {
-            k = (uint8_t)n;
+            k = (uint16_t)n;
             ScrlCapIdEntry &e = c->ids[k];
             e.id = (uint16_t)id;
             e.frames = 0;
@@ -183,7 +184,7 @@ static inline void scrl_cap_feed(ScrlCapture *c, uint32_t id, bool ext, uint8_t 
             c->id_count.store(n + 1u, std::memory_order_release);
         }
     }
-    if (k != 0xFFu) {
+    if (k != 0xFFFFu) {
         ScrlCapIdEntry &e = c->ids[k];
         e.frames++;
         e.last_ms = t_ms;
@@ -301,9 +302,7 @@ static inline size_t scrl_cap_pack_state(ScrlCapture *c, uint32_t t_ms, uint32_t
     scrl_cap_put32(&p[0], t_ms);
     p[4] = c->running.load() ? 1u : 0u;
     p[5] = c->mode;
-    uint32_t ids = c->id_count.load(std::memory_order_acquire);
-    p[6] = (uint8_t)(ids > 255u ? 255u : ids);
-    p[7] = 0u;
+    scrl_cap_put16(&p[6], c->id_count.load(std::memory_order_acquire));
     scrl_cap_put32(&p[8], c->rx_all.load(std::memory_order_relaxed));
     scrl_cap_put32(&p[12], rx_queue_lost);
     scrl_cap_put32(&p[16], c->ext.load(std::memory_order_relaxed));
