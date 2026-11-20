@@ -138,6 +138,9 @@ export class BoardLink {
     this.connected = false;
   }
 
+  // How this browser sends OTA data to this board: "command", "response", or "" (it cannot).
+  writeMode() { return SC.otaWriteMode(this.info, navigator.userAgent, navigator.maxTouchPoints || 0); }
+
   // Seconds until an unconfirmed image goes back to the old one.
   pendingLeft() {
     if (!this.status) return 0;
@@ -175,6 +178,9 @@ export class BoardLink {
     const say = t => { this.log(t); if (hooks.onText) hooks.onText(t); };
     const size = image.bytes.length, chunk = this.chunk;
     if (this.updating) throw new Error("an update runs");
+    // iPhone and iPad: write with response (Bluefy drops the writes without response), only to firmware that takes it.
+    const mode = this.writeMode();
+    if (!mode) throw new Error(SC.OTA_IOS_TEXT);
     this.updating = true; this.otaCredit = 0; this.otaStopped = null;
     let begun = false; // the board took BEGIN and END is not sent: an error sends ABORT
     let sent = 0;
@@ -183,7 +189,7 @@ export class BoardLink {
       if (cut) { const next = SC.nextChunk(chunk); if (next) { this.chunk = next; store(CHUNK_KEY, String(next)); e.nextChunk = next; } }
       throw e;
     };
-    this.log(`update: ${size} bytes, ${chunk} bytes per write, window ${O.WINDOW} bytes`);
+    this.log(`update: ${size} bytes, ${chunk} bytes per write, ${mode === "response" ? "write with response" : "write without response"}, window ${O.WINDOW} bytes`);
     try {
       say("The board prepares the update.");
       let wait = this.waitOta(e => e.event === O.EVT_BEGIN || e.event === O.EVT_STOPPED, 20000);
@@ -208,7 +214,7 @@ export class BoardLink {
         if (!SC.creditIsWhole(this.otaCredit, chunk, size)) fail(`the link cut a write of ${chunk} bytes`, { cut: true });
         if (!SC.mayWrite(sent, n, this.otaCredit)) continue;
         try {
-          await this.write("otaData", image.bytes.subarray(sent, sent + n), true);
+          await this.write("otaData", image.bytes.subarray(sent, sent + n), mode === "command");
         } catch (e) {
           if (!this.gattUp) fail("the board disconnected");
           fail(`the browser refused a write of ${n} bytes (${errText(e)})`, { cut: true });
