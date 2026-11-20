@@ -24,6 +24,7 @@
 #include "scrl_app.h"
 #include "scrl_ble.h"
 #include "scrl_board.h"
+#include "scrl_capture.h"
 #include "scrl_can.h"
 #include "scrl_log.h"
 #include "scrl_logbuf.h"
@@ -262,8 +263,13 @@ static void can_task(void *) {
             }
         }
 
+        scrl_capture_can_tick();
         CanFrame frame;
-        if (scrl_can_receive(&frame, 20)) scrl_proc_handle_frame(frame);
+        if (scrl_can_receive(&frame, 20)) {
+            scrl_capture_can_feed(frame.id, frame.ext != 0u, frame.dlc, frame.data,
+                                  frame.rx_ms ? frame.rx_ms : scrl_millis());
+            scrl_proc_handle_frame(frame);
+        }
 
         ScrlCanEvent event = scrl_can_poll_event();
         if (event != SCRL_CAN_EVENT_NONE) {

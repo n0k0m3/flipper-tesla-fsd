@@ -287,6 +287,7 @@ void scrl_proc_fill_status(ScrlStatus *out) {
     if (s_state.tesla_ota_in_progress) flags |= SCRL_FLAG_TESLA_OTA;
     if (s_state.das_hw4_status_seen) flags |= SCRL_FLAG_HW4_SEEN;
     if (s_inhibit & SCRL_INHIBIT_IMAGE_PENDING) flags |= SCRL_FLAG_IMAGE_PENDING;
+    if (s_inhibit & SCRL_INHIBIT_CAPTURE) flags |= SCRL_FLAG_CAPTURE;
     out->flags = flags;
 }
 

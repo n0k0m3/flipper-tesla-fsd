@@ -9,6 +9,7 @@ set(srcs
     "scrl_ble.cpp"
     "scrl_board_desc.cpp"
     "scrl_can.cpp"
+    "scrl_capture.cpp"
     "scrl_logbuf.cpp"
     "scrl_ota.cpp"
     "scrl_proc.cpp"

@@ -58,6 +58,7 @@
 #define SCRL_FLAG_PINS_CHECKED  (1u << 12)  // the build names the CAN pins
 #define SCRL_FLAG_PAIRING_OPEN  (1u << 13)  // the board accepts a new bond now
 #define SCRL_FLAG_CAN_RUNNING   (1u << 14)  // the CAN controller is started
+#define SCRL_FLAG_CAPTURE       (1u << 15)  // a capture runs: Listen-Only (scrl_capture.h)
 
 struct ScrlStatus {
     ScrollAckRuntime scroll;  // snapshot of the Scroll Ack state

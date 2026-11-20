@@ -13,6 +13,7 @@
  *   0007  Log          notify                event lines, the last 64 on subscribe
  *   0008  OTA control  write, notify         see scrl_ota.h
  *   0009  OTA data     write without response
+ *   000A  Capture      notify                packets of a capture, see scrl_capture.h (0.4.0)
  * Info is open. Every other characteristic needs an encrypted and
  * authenticated link.
  *
@@ -44,6 +45,11 @@
 #define SCRL_CMD_FACTORY_RESET  0x04u
 #define SCRL_CMD_CONFIRM_IMAGE  0x05u  // makes a new image permanent, see scrl_ota.h
 #define SCRL_CMD_SET_PASSKEY    0x06u  // followed by 6 ASCII digits, see scrl_passkey.h
+// Capture (scrl_capture.h). Subscribe to Capture first: the board stops a
+// capture when the link drops or the subscription ends.
+#define SCRL_CMD_CAPTURE_START  0x07u  // + mode u8 (SCRL_CAP_MODE_*), + u16 IDs for mode 2
+#define SCRL_CMD_CAPTURE_STOP   0x08u
+#define SCRL_CMD_CAPTURE_MARK   0x09u  // + step u8
 
 #define SCRL_BLE_PAIR_WINDOW_BOOT_MS   (5u * 60u * 1000u)
 #define SCRL_BLE_PAIR_WINDOW_BUTTON_MS (2u * 60u * 1000u)

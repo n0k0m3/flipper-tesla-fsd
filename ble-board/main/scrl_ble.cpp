@@ -16,6 +16,7 @@
 #include "esp_debug_helpers.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "nvs.h"
 #include "host/ble_hs.h"
 #include "host/ble_store.h"
 #include "host/util/util.h"
@@ -26,6 +27,8 @@
 
 #include "scrl_app.h"
 #include "scrl_board.h"
+#include "scrl_can.h"
+#include "scrl_capture.h"
 #include "scrl_logbuf.h"
 #include "scrl_log.h"
 #include "scrl_ota.h"
@@ -52,9 +55,11 @@ static const ble_uuid128_t UUID_COMMAND = SCRL_UUID(0x06);
 static const ble_uuid128_t UUID_LOG = SCRL_UUID(0x07);
 static const ble_uuid128_t UUID_OTA_CTRL = SCRL_UUID(0x08);
 static const ble_uuid128_t UUID_OTA_DATA = SCRL_UUID(0x09);
+static const ble_uuid128_t UUID_CAPTURE = SCRL_UUID(0x0A);
 
 enum ChrId : intptr_t {
-    CHR_INFO, CHR_STATUS, CHR_LIVE, CHR_SETTINGS, CHR_COMMAND, CHR_LOG, CHR_OTA_CTRL, CHR_OTA_DATA
+    CHR_INFO, CHR_STATUS, CHR_LIVE, CHR_SETTINGS, CHR_COMMAND, CHR_LOG, CHR_OTA_CTRL, CHR_OTA_DATA,
+    CHR_CAPTURE
 };
 
 // Advertise once per second (unit 0.625 ms).
@@ -70,7 +75,7 @@ enum ChrId : intptr_t {
     (BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_AUTHEN)
 
 static uint16_t s_h_info, s_h_status, s_h_live, s_h_settings, s_h_command, s_h_log, s_h_ota_ctrl,
-    s_h_ota_data;
+    s_h_ota_data, s_h_capture;
 
 static uint32_t s_passkey;
 static uint8_t s_own_addr_type;
@@ -79,7 +84,7 @@ static char s_name[12];
 static std::atomic<uint16_t> s_conn{BLE_HS_CONN_HANDLE_NONE};
 static std::atomic<bool> s_authenticated;
 static std::atomic<uint32_t> s_conn_ms;
-static std::atomic<bool> s_sub_live, s_sub_log, s_sub_ota;
+static std::atomic<bool> s_sub_live, s_sub_log, s_sub_ota, s_sub_capture;
 static std::atomic<uint32_t> s_pair_until_ms;  // the pairing window closes at this time
 static std::atomic<bool> s_pair_open;
 
@@ -218,6 +223,20 @@ static int write_command(const uint8_t *data, size_t len) {
         scrl_log("CMD  passkey changed");  // never the digits: the log goes out over BLE
         return 0;
     }
+    if (data[0] == SCRL_CMD_CAPTURE_START) {
+        if (len < 2u) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        if (!s_sub_capture.load()) return BLE_ATT_ERR_VALUE_NOT_ALLOWED;
+        ScrlCapRefuse why = scrl_capture_request_start(data[1], &data[2], len - 2u);
+        if (why != ScrlCapRefuse::None) {
+            scrl_log("CAP  start refused, reason %u", (unsigned)why);
+            return BLE_ATT_ERR_VALUE_NOT_ALLOWED;
+        }
+        return 0;
+    }
+    if (data[0] == SCRL_CMD_CAPTURE_MARK) {
+        if (len != 2u) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
+        return scrl_capture_mark(data[1]) ? 0 : BLE_ATT_ERR_VALUE_NOT_ALLOWED;
+    }
     if (len != 1u) return BLE_ATT_ERR_INVALID_ATTR_VALUE_LEN;
     switch (data[0]) {
     case SCRL_CMD_RESET_COUNTERS:
@@ -235,6 +254,9 @@ static int write_command(const uint8_t *data, size_t len) {
         scrl_log("CMD  factory reset");
         scrl_app_factory_reset();
         return 0;
+    case SCRL_CMD_CAPTURE_STOP:
+        scrl_capture_request_stop();
+        return 0;
     case SCRL_CMD_CONFIRM_IMAGE:
         // This write arrived on an authenticated link: BLE, pairing and the
         // path for the next update all work in the new image.
@@ -244,7 +266,7 @@ static int write_command(const uint8_t *data, size_t len) {
     }
 }
 
-static const char *const CHR_NAMES[] = {"info", "status", "live", "settings", "command", "log", "ota_ctrl", "ota_data"};
+static const char *const CHR_NAMES[] = {"info", "status", "live", "settings", "command", "log", "ota_ctrl", "ota_data", "capture"};
 
 static int access_read(ChrId id, struct ble_gatt_access_ctxt *ctxt) {
     switch (id) {
@@ -326,6 +348,8 @@ static const struct ble_gatt_chr_def s_chrs[] = {
              s_h_ota_ctrl),
     SCRL_CHR(UUID_OTA_DATA, CHR_OTA_DATA, BLE_GATT_CHR_F_WRITE_NO_RSP | WRITE_AUTH_FLAGS,
              s_h_ota_data),
+    // Last: the handles of the older characteristics stay the same.
+    SCRL_CHR(UUID_CAPTURE, CHR_CAPTURE, NOTIFY_AUTH, s_h_capture),
     {.uuid = nullptr, .access_cb = nullptr, .arg = nullptr, .descriptors = nullptr, .flags = 0,
      .min_key_size = 0, .val_handle = nullptr, .cpfd = nullptr},
 };
@@ -344,6 +368,7 @@ static void link_down(void) {
     s_sub_live.store(false);
     s_sub_log.store(false);
     s_sub_ota.store(false);
+    s_sub_capture.store(false);  // the capture task stops the capture
     scrl_ota_link_lost();
 }
 
@@ -432,6 +457,8 @@ static int gap_event(struct ble_gap_event *event, void *) {
             s_sub_log.store(on);
         } else if (event->subscribe.attr_handle == s_h_ota_ctrl) {
             s_sub_ota.store(on);
+        } else if (event->subscribe.attr_handle == s_h_capture) {
+            s_sub_capture.store(on);
         }
         return 0;
     }
@@ -483,6 +510,24 @@ static int store_status(struct ble_store_status_event *event, void *arg) {
     return ble_store_util_status_rr(event, arg);
 }
 
+// Layout of the GATT table. Change it with each new or moved characteristic.
+// A phone that bonded under another layout keeps its cached table, so the
+// board then sends Service Changed (NimBLE keeps it for a bonded phone that
+// is not connected, and sends it at the next connection).
+#define SCRL_GATT_LAYOUT 2u  // 2 = Capture added (0.4.0)
+
+static void gatt_layout_check(void) {
+    nvs_handle_t h;
+    if (nvs_open("scrl", NVS_READWRITE, &h) != ESP_OK) return;
+    uint8_t saved = 0;
+    if (nvs_get_u8(h, "gattLayout", &saved) != ESP_OK || saved != SCRL_GATT_LAYOUT) {
+        ble_svc_gatt_changed(0x0001, 0xFFFF);
+        if (nvs_set_u8(h, "gattLayout", SCRL_GATT_LAYOUT) == ESP_OK) nvs_commit(h);
+        scrl_log("BLE  GATT table changed: Service Changed sent to the bonded phones");
+    }
+    nvs_close(h);
+}
+
 static void on_sync(void) {
     int rc = ble_hs_util_ensure_addr(0);
     if (rc == 0) rc = ble_hs_id_infer_auto(0, &s_own_addr_type);
@@ -507,6 +552,7 @@ static void on_sync(void) {
     }
     scrl_log("BLE  ready, name %s, %d bond(s), pairing window %s", s_name, bonds,
              scrl_ble_pairing_open() ? "open" : "closed");
+    if (bonds > 0) gatt_layout_check();
     advertise();
 }
 
@@ -518,6 +564,48 @@ static void on_reset(int reason) {
 static void host_task(void *) {
     nimble_port_run();
     nimble_port_freertos_deinit();
+}
+
+// ── capture sender ────────────────────────────────────────────────────────────
+
+#define CAPTURE_TASK_STACK    4096
+#define CAPTURE_TASK_PRIORITY 4
+#define CAPTURE_PERIOD_MS     10u
+// Packets per period. Each one also needs a free msys buffer above the
+// reserve, so Status, Live, Log and an update always find buffers.
+#define CAPTURE_PACKETS_MAX   8
+#define CAPTURE_MSYS_RESERVE  12
+
+static void capture_task(void *) {
+    static uint8_t pkt[WRITE_MAX];
+    for (;;) {
+        if (!scrl_capture_active()) {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+        uint16_t conn = s_conn.load();
+        if (conn == BLE_HS_CONN_HANDLE_NONE || !s_authenticated.load() || !s_sub_capture.load()) {
+            scrl_capture_link_lost();
+            vTaskDelay(pdMS_TO_TICKS(CAPTURE_PERIOD_MS));
+            continue;
+        }
+        uint16_t mtu = ble_att_mtu(conn);
+        size_t size = mtu > 3u ? (size_t)(mtu - 3u) : 0u;
+        if (size > sizeof(pkt)) size = sizeof(pkt);
+        ScrlCanInfo can;
+        scrl_can_get_info(&can);
+        for (int i = 0; i < CAPTURE_PACKETS_MAX; i++) {
+            if (os_msys_num_free() < CAPTURE_MSYS_RESERVE) break;
+            size_t len = scrl_capture_next_packet(pkt, size, scrl_millis(), can.rx_dropped);
+            if (len == 0u) break;
+            struct os_mbuf *om = ble_hs_mbuf_from_flat(pkt, (uint16_t)len);
+            if (!om) break;
+            // The stack frees om, also on an error. The packet comes again.
+            if (ble_gatts_notify_custom(conn, s_h_capture, om) != 0) break;
+            scrl_capture_sent();
+        }
+        vTaskDelay(pdMS_TO_TICKS(CAPTURE_PERIOD_MS));
+    }
 }
 
 void scrl_ble_init(uint32_t passkey, bool power_on) {
@@ -553,6 +641,7 @@ void scrl_ble_init(uint32_t passkey, bool power_on) {
     ble_store_config_init();
     if (power_on) scrl_ble_open_pairing(SCRL_BLE_PAIR_WINDOW_BOOT_MS);
     nimble_port_freertos_init(host_task);
+    xTaskCreate(capture_task, "capture", CAPTURE_TASK_STACK, nullptr, CAPTURE_TASK_PRIORITY, nullptr);
 }
 
 // Host heartbeat (USB console only). While a phone is connected, the

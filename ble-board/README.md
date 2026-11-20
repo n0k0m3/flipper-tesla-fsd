@@ -156,10 +156,11 @@ Name `SCRL-xxxx`. One service, base UUID `e591xxxx-51ba-4d0b-8422-5cb9dc778552`.
 | `0003` | Status | Read | JSON, at most 512 bytes. Layout in `main/scrl_status.h` |
 | `0004` | Live | Read, Notify (1 Hz) | 19-byte record. Layout in `main/scrl_status.h` |
 | `0005` | Settings | Read, Write | JSON. Rules in `main/scrl_settings.h` |
-| `0006` | Command | Write | One byte: `01` reset counters, `02` restart, `03` forget bonds, `04` factory reset, `05` confirm image. Or `06` and 6 ASCII digits: set a new passkey |
+| `0006` | Command | Write | One byte: `01` reset counters, `02` restart, `03` forget bonds, `04` factory reset, `05` confirm image. Or `06` and 6 ASCII digits: set a new passkey. Capture (0.4.0): `07` + mode (0 plan IDs, 1 all IDs, 2 + u16 ID list) starts, `08` stops, `09` + step marks a step |
 | `0007` | Log | Notify | Event lines. The last 64 lines come first |
 | `0008` | OTA control | Write, Notify | Protocol in `main/scrl_ota.h` |
 | `0009` | OTA data | Write without response | Image chunks |
+| `000A` | Capture | Notify | Capture packets (0.4.0, TWAI boards). The board stays in Listen-Only while a capture runs. Layout in `main/scrl_capture.h` |
 
 Info is open. Each other characteristic needs an encrypted and authenticated link.
 

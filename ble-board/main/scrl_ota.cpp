@@ -20,6 +20,7 @@
 #include "scrl_board.h"
 #include "scrl_board_desc.h"
 #include "scrl_logbuf.h"
+#include "scrl_capture.h"
 #include "scrl_proc.h"
 
 static const char *TAG = "scrl_ota";
@@ -137,6 +138,7 @@ static uint8_t begin_update(const uint8_t *data, size_t len) {
 
     // Listen-Only for the whole update. The CAN task restarts the controller.
     scrl_proc_set_inhibit(SCRL_INHIBIT_BLE_OTA, true);
+    scrl_capture_request_stop();  // the update needs the link
     esp_err_t err = esp_ota_begin(target, OTA_WITH_SEQUENTIAL_WRITES, &s_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_ota_begin: %s", esp_err_to_name(err));

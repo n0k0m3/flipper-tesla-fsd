@@ -24,6 +24,7 @@
 #define SCRL_INHIBIT_BLE_OTA       (1u << 1)  // a BLE update runs
 #define SCRL_INHIBIT_IMAGE_PENDING (1u << 2)  // a new image runs and is not confirmed
 #define SCRL_INHIBIT_NO_TX_PIN     (1u << 3)  // no TX path: pins not checked, or a Listen-Only build
+#define SCRL_INHIBIT_CAPTURE       (1u << 4)  // a capture runs (scrl_capture.h); never saved
 
 /** Set up the state: HW4 fixed, Listen-Only, the given settings. Call once. */
 void scrl_proc_init(const ScrlSettings &settings, uint32_t inhibit);
