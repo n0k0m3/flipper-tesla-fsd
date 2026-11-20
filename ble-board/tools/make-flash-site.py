@@ -45,6 +45,14 @@ def git_commit() -> str:
     return out + ("-dirty" if dirty else "")
 
 
+def image_version(app: Path) -> str:
+    """Version in esp_app_desc_t of an app image: magic 0xABCD5432 at offset 32, version at offset 48."""
+    b = app.read_bytes()[:96]
+    if len(b) < 80 or int.from_bytes(b[32:36], "little") != 0xABCD5432:
+        return ""
+    return b[48:80].split(b"\0", 1)[0].decode("ascii", "replace")
+
+
 def defines(path: Path, prefix: str) -> dict:
     """#define <prefix>NAME value, for plain integer values and (a * b * c)."""
     out = {}
@@ -71,9 +79,14 @@ def check_codec() -> list:
     if not re.search(r"e591xxxx-51ba-4d0b-8422-5cb9dc778552", ble_h.read_text()) or \
             "-51ba-4d0b-8422-5cb9dc778552" not in js:
         errors.append("flash-site/scrl.js: the UUID base differs from main/scrl_ble.h")
-    for name, want in defines(ble_h, "SCRL_CMD_").items():
-        if js_obj("CMD").get(name) != want:
-            errors.append(f"flash-site/scrl.js: CMD.{name} is not {want} (main/scrl_ble.h)")
+    # The page sends only CONFIRM_IMAGE. Newer firmware commands may be missing from the copy, but a command
+    # that the copy has must have the firmware value.
+    fw_cmd, js_cmd = defines(ble_h, "SCRL_CMD_"), js_obj("CMD")
+    if "CONFIRM_IMAGE" not in js_cmd:
+        errors.append("flash-site/scrl.js: no CMD.CONFIRM_IMAGE")
+    for name, got in js_cmd.items():
+        if fw_cmd.get(name) != got:
+            errors.append(f"flash-site/scrl.js: CMD.{name} is {got}, main/scrl_ble.h says {fw_cmd.get(name)}")
     ota = defines(ROOT / "main" / "scrl_ota.h", "SCRL_OTA_")
     js_ota, js_err = js_obj("OTA"), js_obj("OTA_ERR")
     for name, want in ota.items():
@@ -90,7 +103,7 @@ def check_codec() -> list:
 
 def main() -> None:
     text = json.loads((ROOT / "flash-site" / "boards.json").read_text())["builds"]
-    version, commit = project_version(), git_commit()
+    commit = git_commit()
     builds = []
     errors = check_codec()
     # Site order = the order in boards.json. Every build in boards/ must be there.
@@ -117,11 +130,23 @@ def main() -> None:
         if not app.is_file():
             errors.append(f"{bid}: no {app.relative_to(ROOT)} (run tools/build-boards.sh)")
             continue
-        builds.append({"id": bid, "board": m.group(1), "target": target, "chip": CHIP_FAMILY[target],
+        ver = image_version(app)
+        if not ver:
+            errors.append(f"{bid}: no app description in {app.relative_to(ROOT)}")
+        builds.append({"id": bid, "version": ver, "board": m.group(1), "target": target, "chip": CHIP_FAMILY[target],
                        "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
                        "app": app.name, "app_sha256": hashlib.sha256(app.read_bytes()).hexdigest(), **text[bid]})
     extra = sorted(set(text) - known)
     errors += [f"{bid}: in boards.json but not in boards/" for bid in extra]
+    # The site shows one version: the version inside the images, not PROJECT_VER, which can be ahead of them.
+    versions = sorted({b["version"] for b in builds})
+    if len(versions) > 1:
+        errors.append("the images have different versions: " + ", ".join(
+            f"{v} ({', '.join(b['id'] for b in builds if b['version'] == v)})" for v in versions))
+    elif versions and versions[0] != project_version():
+        print(f"note: the images are {versions[0]}, CMakeLists.txt says {project_version()}. Run tools/build-boards.sh "
+              "for a site with the new version.", file=sys.stderr)
+    version = versions[0] if versions else project_version()
     if errors:
         sys.exit("\n".join(errors))
 
