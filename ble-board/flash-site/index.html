@@ -109,7 +109,7 @@ summary { cursor: pointer; font-weight: 600; }
     <div class="meta" id="meta">Loading the build list…</div>
   </header>
 
-  <div class="notice warn"><strong>Early firmware.</strong> The NanoH2 build passed the full validation in the car. On the other boards only the USB flash and the pairing ran, on the bench. The Bluetooth update of this page has not run on a board yet. Flash on the bench, not in the car. After an erase, the board starts with Scroll Ack off and in Listen-Only.</div>
+  <div class="notice warn"><strong>Early firmware.</strong> The NanoH2 build passed the full validation in the car. On the other boards only the USB flash and the pairing ran, on the bench. The Bluetooth update of this page worked from Chrome on a computer. It does not work from an iPhone (Bluefy). Android is not tested. Flash on the bench, not in the car. After an erase, the board starts with Scroll Ack off and in Listen-Only.</div>
   <div class="notice bad" id="noserial" hidden>This browser has no Web Serial, so it cannot flash over USB. Use Chrome or Edge on a computer for USB. The Bluetooth update works in this browser.</div>
   <div class="notice bad" id="nobrowser" hidden>This browser has no Web Serial and no Web Bluetooth. Use Chrome or Edge on a computer, Chrome on Android, or Bluefy on an iPhone.</div>
 
@@ -143,7 +143,7 @@ summary { cursor: pointer; font-weight: 600; }
       </div>
       <div id="ble">
         <h3 class="part">Update over Bluetooth</h3>
-        <p class="hint">For a board that runs this firmware already. It works on a phone: Chrome on Android, Bluefy on an iPhone. The board keeps its passkey, its bonds and its settings. The car must be parked, with Autopilot off. Close the control app first: the board takes one link at a time.</p>
+        <p class="hint">For a board that runs this firmware already. Use Chrome or Edge on a computer. Chrome on Android is not tested. An iPhone (Bluefy) can connect and confirm a new image, but cannot send one. The board keeps its passkey, its bonds and its settings. The car must be parked, with Autopilot off. Close the control app first: the board takes one link at a time.</p>
         <div class="actions">
           <button class="btn" type="button" id="bleconnect">Connect over Bluetooth</button>
           <button class="btn" type="button" id="blesend" hidden>Send this build</button>
@@ -155,6 +155,11 @@ summary { cursor: pointer; font-weight: 600; }
         <progress id="bleprogress" max="1" value="0" hidden></progress>
         <div id="blecheck"></div>
         <dl id="bleboard" hidden></dl>
+        <details class="console" id="blelogbox">
+          <summary>Update log</summary>
+          <pre id="blelog" aria-label="Bluetooth update log"></pre>
+          <div class="actions"><button class="btn ghost" type="button" id="blelogcopy">Copy the log</button></div>
+        </details>
       </div>
     </section>
   </div>
@@ -202,6 +207,9 @@ let session = null;     // { stop, port, reader } while the page holds a serial 
 let usbBusy = false;
 const supported = "serial" in navigator;
 const bleSupported = bluetoothSupported();
+// iPhone and iPad browsers with Web Bluetooth (Bluefy) run on CoreBluetooth. In Bluefy (2026-11-20) the board got
+// none of the data writes, and the link then blocked every write. Connect and confirm still work there.
+const iosBle = /iPhone|iPad|iPod/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
 if (!supported) $(bleSupported ? "noserial" : "nobrowser").hidden = false;
 // A browser with Bluetooth and no USB (a phone): the Bluetooth update comes first.
 if (!supported && bleSupported) $("usb").before($("ble"));
@@ -334,6 +342,16 @@ let bleConnecting = false;
 const BU = { text: "", tone: "", canStop: false, stopAsked: false, check: null };
 
 function bleSay(text, tone = "") { BU.text = text; BU.tone = tone; bleRender(); }
+const bleLines = [];
+function bleLog(text) {
+  const t = new Date().toTimeString().slice(0, 8);
+  bleLines.push(`${t} ${text}`);
+  if (bleLines.length > 600) bleLines.splice(0, bleLines.length - 600);
+  const pre = $("blelog");
+  const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+  pre.textContent = bleLines.join("\n");
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
 const bleOn = () => !!(ble && ble.connected && ble.status);
 const boardIdOf = link => SC.boardOf(link.info).id;
 const bleMatches = () => bleOn() && current && boardIdOf(ble) === current.board;
@@ -348,7 +366,7 @@ function bleRender() {
   $("bleconnect").disabled = !bleSupported || usbBusy || bleConnecting;
   // The board refuses an update while its running image is not confirmed.
   $("blesend").hidden = !on || sending || pending;
-  $("blesend").disabled = !bleMatches();
+  $("blesend").disabled = !bleMatches() || iosBle;
   $("blesend").textContent = current ? `Send ${current.id}` : "Send this build";
   $("blestop").hidden = !sending || !BU.canStop;
   $("bleconfirm").hidden = !pending || sending;
@@ -373,6 +391,14 @@ function bleRender() {
     ];
     dl.hidden = false;
     dl.replaceChildren(...rows.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
+    // A failed try makes the writes smaller, and the size stays in this browser. Offer the way back.
+    const dd = el("dd", { text: `${ble.chunk} bytes per write of the update` });
+    if (ble.chunk !== ble.defaultChunk && !sending) {
+      const btn = el("button", { class: "linkbtn", type: "button", text: `back to ${ble.defaultChunk}` });
+      btn.addEventListener("click", () => { ble.resetChunk(); bleLog(`write size reset to ${ble.chunk} bytes`); bleRender(); });
+      dd.append(" (", btn, ")");
+    }
+    dl.append(el("dt", { text: "Write size" }), dd);
   }
 
   // Does the selected build fit the board? What to do with a new image?
@@ -393,6 +419,11 @@ function bleRender() {
     parts.push(el("div", { class: `box ${BU.check.errors.length ? "bad" : "warn"}` },
       el("ul", null, [...BU.check.errors, ...BU.check.warnings].map(t => el("li", { text: t })))));
   }
+  if (on && iosBle && !sending) {
+    parts.push(el("div", { class: "box warn" },
+      "The update does not work from an iPhone or iPad: in Bluefy the board got none of the data. ",
+      "Send the update from Chrome on a computer, or flash over USB. Here you can still check the board and confirm a new image."));
+  }
   if (pending && !sending) {
     parts.push(el("div", { class: "box warn" },
       el("strong", { text: "The new image is not confirmed. " }),
@@ -412,6 +443,7 @@ async function bleConnect() {
     return;
   }
   const link = new BoardLink(device, {
+    log: bleLog,
     onChange: bleRender,
     onGone: () => { if (ble === link) { ble = null; bleSay("The board disconnected.", "bad"); } },
   });
@@ -447,10 +479,13 @@ async function bleSend() {
     if (!confirm(`Send ${b.id} (firmware ${info.version}) to ${link.name}?\n\nThe car must be parked, with Autopilot off. The board stays in Listen-Only during the update and until you confirm the new image.${extra}`)) { bleSay(""); return; }
     BU.canStop = false; BU.stopAsked = false;
     prog.hidden = false; prog.value = 0;
+    $("blelogbox").open = true;
+    bleLog(`send ${b.id} (${bytes.length} bytes, SHA-256 ${SC.hex(sha).slice(0, 16)}…) to ${link.name}, browser: ${navigator.userAgent}`);
     const job = link.update({ bytes, sha }, {
       onText: t => bleSay(t),
       onBegun: () => { BU.canStop = true; bleRender(); },
       onProgress: (sent, size) => { prog.max = size; prog.value = sent; bleSay(`Sent ${sent} of ${size} bytes (${Math.floor(sent * 100 / size)} %).`); },
+      onWait: (sent, credit) => bleSay(`Sent ${sent} of ${bytes.length} bytes. Waiting for the board to write the flash (credit ${credit})…`),
       onSent: () => { BU.canStop = false; prog.hidden = true; bleRender(); },
       aborted: () => BU.stopAsked,
       onPairing: pairHint,
@@ -480,6 +515,9 @@ async function bleConfirm() {
 }
 
 $("bleconnect").addEventListener("click", bleConnect);
+$("blelogcopy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(bleLines.join("\n")); bleSay("Log copied.", "ok"); } catch { bleSay("The browser refused the copy. Select the log text by hand.", "bad"); }
+});
 $("blesend").addEventListener("click", bleSend);
 $("blestop").addEventListener("click", () => { BU.stopAsked = true; BU.canStop = false; bleSay("Stopping the update…"); });
 $("bleconfirm").addEventListener("click", bleConfirm);
