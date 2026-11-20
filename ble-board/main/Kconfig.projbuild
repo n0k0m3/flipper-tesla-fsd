@@ -86,25 +86,30 @@ menu "Scroll Ack BLE board"
     choice SCRL_CAN_PINS
         prompt "Grove pins for TWAI TX and RX"
         depends on SCRL_BOARD_NANOH2
-        default SCRL_CAN_PINS_UNCHECKED
+        default SCRL_CAN_PINS_TX2_RX1
         help
             The NanoH2 Grove port carries GPIO1 and GPIO2 to the Unit Mini CAN.
             The M5Stack sources disagree on which one is CAN TX. A wrong choice
             puts two outputs against each other.
 
-            Before the first power-up with the Grove cable, measure continuity
-            (nothing powered) from the NanoH2 Grove pins to TJA1051T/3 pin 1
-            (TXD) and pin 4 (RXD) on the Mini CAN. TWAI TX goes to TXD.
+            The default, TX = GPIO2 and RX = GPIO1, comes from a Unit Mini CAN
+            on the NanoH2 Grove port (2026-11-20): the pin probe, a Listen-Only
+            test of both choices, and the full validation in the car.
 
-            Until you choose, the firmware attaches no TX pin and runs a
-            Listen-Only pin probe.
+            With another cable or another unit, measure continuity before the
+            first power-up (nothing powered) from the NanoH2 Grove pins to
+            TJA1051T/3 pin 1 (TXD) and pin 4 (RXD) on the Mini CAN. TWAI TX
+            goes to TXD.
 
-        config SCRL_CAN_PINS_UNCHECKED
-            bool "Not checked yet (Listen-Only pin probe)"
+            "Not checked yet" attaches no TX pin and runs a Listen-Only pin
+            probe. It cannot go to Active.
+
+        config SCRL_CAN_PINS_TX2_RX1
+            bool "TX = GPIO2, RX = GPIO1 (tested on a board)"
         config SCRL_CAN_PINS_TX1_RX2
             bool "TX = GPIO1, RX = GPIO2"
-        config SCRL_CAN_PINS_TX2_RX1
-            bool "TX = GPIO2, RX = GPIO1"
+        config SCRL_CAN_PINS_UNCHECKED
+            bool "Not checked yet (Listen-Only pin probe)"
     endchoice
 
     choice SCRL_MCP2515_CRYSTAL

@@ -1,3 +1,4 @@
 # nanoh2-minican: see main/Kconfig.projbuild and main/scrl_board.h.
 CONFIG_IDF_TARGET="esp32h2"
 CONFIG_SCRL_BOARD_NANOH2=y
+CONFIG_SCRL_CAN_PINS_TX2_RX1=y

@@ -19,7 +19,7 @@ One source tree, one build per board. The pins come from hypery (`esp32/platform
 
 | Build ID | Board ID | Chip | CAN controller | Button |
 |---|---|---|---|---|
-| `nanoh2-minican` | same | ESP32-H2 | TWAI, Grove GPIO1/2 (see [NanoH2](#nanoh2-before-the-first-power-up-with-the-grove-cable)) | GPIO9 |
+| `nanoh2-minican` | same | ESP32-H2 | TWAI, Grove: TX GPIO2, RX GPIO1 (see [NanoH2](#nanoh2-before-the-first-power-up-with-the-grove-cable)) | GPIO9 |
 | `m5stack-atom` | same | ESP32 | TWAI, TX 22, RX 19 | GPIO0 |
 | `m5stack-atom-matrix` | same | ESP32 | TWAI, TX 22, RX 19 | GPIO39 |
 | `m5stack-atom-swap-pins` | same | ESP32 | TWAI, TX 19, RX 22 | GPIO0 |
@@ -61,17 +61,13 @@ To change an option of one board, run `idf.py -B build/<build-id> -D SDKCONFIG=b
 The M5Stack sources disagree on which Grove pin is CAN TX (GPIO1 or GPIO2).
 A wrong choice puts two outputs against each other.
 
-The default build (`Not checked yet`) is safe with each wiring:
-- It attaches no TX pin. Both Grove pins are inputs.
-- It runs in Listen-Only and cannot go to Active.
-- It listens on one Grove pin for 3 s, then on the other one, until frames arrive.
-- It then writes a line to the event log: `CAN  frames arrive on GPIOx: RX = GPIOx, TX = GPIOy`.
+The `nanoh2-minican` build uses **TX = GPIO2, RX = GPIO1**. This comes from a Unit Mini CAN on the NanoH2 Grove port (2026-11-20): the pin probe, a Listen-Only test of both pin choices, and the full validation in the car.
 
-To get a build that can go to Active:
-1. Measure continuity with nothing powered: NanoH2 GPIO1 and GPIO2 (Grove pins) to TJA1051T/3 pin 1 (TXD) and pin 4 (RXD) on the Mini CAN. TWAI TX goes to TXD.
-2. Compare the result with the log line of the pin probe. They must agree.
-3. Run `idf.py -B build/nanoh2-minican -D SDKCONFIG=build/nanoh2-minican/sdkconfig menuconfig`, open `Scroll Ack BLE board`, and set `Grove pins for TWAI TX and RX`.
-4. Run `tools/build-boards.sh nanoh2-minican` and flash.
+With another cable or another unit:
+1. Measure continuity with nothing powered: NanoH2 GPIO2 must go to TJA1051T/3 pin 1 (TXD), and GPIO1 to pin 4 (RXD) on the Mini CAN.
+2. If GPIO1 goes to TXD, do not flash `nanoh2-minican`. Run `idf.py -B build/nanoh2-minican -D SDKCONFIG=build/nanoh2-minican/sdkconfig menuconfig`, open `Scroll Ack BLE board`, set `Grove pins for TWAI TX and RX` to `TX = GPIO1, RX = GPIO2`, and run `tools/build-boards.sh nanoh2-minican`.
+3. If you are not sure, set `Not checked yet` instead. That build attaches no TX pin, makes both Grove pins inputs, and cannot go to Active. It listens on one Grove pin for 3 s, then on the other one, until frames arrive. It then writes a line to the event log: `CAN  frames arrive on GPIOx: RX = GPIOx, TX = GPIOy`.
+4. After the first flash, stay in Listen-Only and make sure that frames arrive. A wrong pin choice receives nothing. Do not set Active then: in Active it drives the TX pin against the RXD output of the transceiver.
 
 In Listen-Only the TX pin is never attached, in every build.
 
