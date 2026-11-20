@@ -5,14 +5,17 @@
  * One custom service, base UUID e591xxxx-51ba-4d0b-8422-5cb9dc778552:
  *   0001  service
  *   0002  Info         read                  JSON: version, build, board, chip, ID,
- *                                            imax = longest Timer interval in ms (0.3.2)
+ *                                            imax = longest Timer interval in ms (0.3.2),
+ *                                            otaw = 1: OTA data also takes write
+ *                                            with response (0.4.2)
  *   0003  Status       read                  JSON, see scrl_status.h
  *   0004  Live         read, notify (1 Hz)   19 bytes, see scrl_status.h
  *   0005  Settings     read, write           JSON, see scrl_settings.h
  *   0006  Command      write                 one byte, SCRL_CMD_*. SET_PASSKEY adds 6 ASCII digits
  *   0007  Log          notify                event lines, the last 64 on subscribe
  *   0008  OTA control  write, notify         see scrl_ota.h
- *   0009  OTA data     write without response
+ *   0009  OTA data     write without response, write (0.4.2: Bluefy on iOS
+ *                      delivers no write without response here)
  *   000A  Capture      notify                packets of a capture, see scrl_capture.h (0.4.0)
  * Info is open. Every other characteristic needs an encrypted and
  * authenticated link.

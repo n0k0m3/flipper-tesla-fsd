@@ -151,12 +151,12 @@ static int read_info(struct os_mbuf *om) {
     esp_read_mac(mac, ESP_MAC_BT);
     char sha[9];
     esp_app_get_elf_sha256(sha, sizeof(sha));
-    char json[320];
+    char json[352];
     int n = snprintf(json, sizeof(json),
                      "{\"fw\":\"%s\",\"build\":\"%s\",\"built\":\"%s %s\",\"idf\":\"%s\","
                      "\"board\":\"%s\",\"chip\":\"%s\",\"can\":\"%s\","
                      "\"id\":\"%02x%02x%02x%02x%02x%02x\",\"rst_log\":[%u,%u,%u,%u],"
-                     "\"imax\":%u}",
+                     "\"imax\":%u,\"otaw\":1}",
                      app->version, sha, app->date, app->time, app->idf_ver,
                      CONFIG_SCRL_BOARD_ID, CONFIG_IDF_TARGET, SCRL_CAN_KIND,
                      mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
@@ -346,8 +346,11 @@ static const struct ble_gatt_chr_def s_chrs[] = {
     SCRL_CHR(UUID_LOG, CHR_LOG, NOTIFY_AUTH, s_h_log),
     SCRL_CHR(UUID_OTA_CTRL, CHR_OTA_CTRL, BLE_GATT_CHR_F_WRITE | WRITE_AUTH_FLAGS | NOTIFY_AUTH,
              s_h_ota_ctrl),
-    SCRL_CHR(UUID_OTA_DATA, CHR_OTA_DATA, BLE_GATT_CHR_F_WRITE_NO_RSP | WRITE_AUTH_FLAGS,
-             s_h_ota_data),
+    // Write with response too: Bluefy on iOS delivered none of the writes without
+    // response, and then blocked the link. A write with response waits for each
+    // chunk, so it is slower but iOS cannot drop it. Info says "otaw":1.
+    SCRL_CHR(UUID_OTA_DATA, CHR_OTA_DATA,
+             BLE_GATT_CHR_F_WRITE_NO_RSP | BLE_GATT_CHR_F_WRITE | WRITE_AUTH_FLAGS, s_h_ota_data),
     // Last: the handles of the older characteristics stay the same.
     SCRL_CHR(UUID_CAPTURE, CHR_CAPTURE, NOTIFY_AUTH, s_h_capture),
     {.uuid = nullptr, .access_cb = nullptr, .arg = nullptr, .descriptors = nullptr, .flags = 0,

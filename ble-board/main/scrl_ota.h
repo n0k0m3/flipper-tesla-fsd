@@ -5,8 +5,8 @@
  * FLOW
  *   1. Phone writes BEGIN to OTA control: image size and SHA-256.
  *   2. Phone writes the image to OTA data, in chunks of MTU - 3 bytes, without
- *      response. It never sends more than SCRL_OTA_WINDOW bytes past the last
- *      CREDIT offset.
+ *      response (or with response: iOS, Info "otaw":1). It never sends more
+ *      than SCRL_OTA_WINDOW bytes past the last CREDIT offset.
  *   3. Phone writes END. The board checks the size, the SHA-256 and the image
  *      (magic, chip ID, checksum, board ID in scrl_board_desc.h), selects the
  *      new slot, and restarts.
