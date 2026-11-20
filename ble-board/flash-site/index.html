@@ -1,0 +1,646 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE Board Flasher</title>
+<meta name="description" content="Flash the BLE Scroll Ack firmware over USB onto the NanoH2 and the hypery ESP32 boards and read the BLE passkey, or update a board over Bluetooth.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231f6feb'/%3E%3Cpath d='M9 8h14v16H9z' fill='none' stroke='white' stroke-width='2.5'/%3E%3Cpath d='M13 4v4M19 4v4M13 24v4M19 24v4' stroke='white' stroke-width='2.5'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #14171c; --muted: #5d6673; --line: #dfe3e8;
+  --accent: #1f6feb; --accent-ink: #ffffff; --accent-soft: #e7f0fe;
+  --warn: #9a5b00; --warn-soft: #fff4e0; --bad: #b42318; --bad-soft: #fdecea; --ok: #1a7f37; --ok-soft: #e6f4ea;
+  --console: #0f1216; --console-ink: #cfd6df;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --card: #171b21; --ink: #e8ebef; --muted: #98a2b0; --line: #2a313a;
+    --accent: #4c8dff; --accent-ink: #0b0d10; --accent-soft: #16243a;
+    --warn: #f0b45c; --warn-soft: #2b2112; --bad: #ff8a80; --bad-soft: #2d1614; --ok: #5bd17a; --ok-soft: #12261a;
+    --console: #090b0e; --console-ink: #cfd6df;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --card: #171b21; --ink: #e8ebef; --muted: #98a2b0; --line: #2a313a;
+  --accent: #4c8dff; --accent-ink: #0b0d10; --accent-soft: #16243a;
+  --warn: #f0b45c; --warn-soft: #2b2112; --bad: #ff8a80; --bad-soft: #2d1614; --ok: #5bd17a; --ok-soft: #12261a;
+  --console: #090b0e; --console-ink: #cfd6df;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+header h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); }
+.meta { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+.notice { border-radius: 10px; padding: 10px 14px; margin: 16px 0 0; font-size: 14px; }
+.notice.warn { background: var(--warn-soft); color: var(--warn); }
+.notice.bad { background: var(--bad-soft); color: var(--bad); }
+.grid { display: grid; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); gap: 16px; margin-top: 20px; align-items: start; }
+@media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+.list { padding: 6px; }
+.group { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 10px 10px 4px; }
+.board { display: block; width: 100%; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 8px 10px; border-radius: 8px; cursor: pointer; }
+.board:hover { background: var(--accent-soft); }
+.board[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.board:disabled { cursor: not-allowed; opacity: 0.6; }
+.board .id { display: block; font-family: var(--mono); font-size: 12px; opacity: 0.75; }
+.detail { padding: 18px 20px; }
+.detail h2 { margin: 0; font-size: 19px; }
+.detail .sub { color: var(--muted); font-family: var(--mono); font-size: 13px; margin-top: 2px; }
+dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 14px; margin: 14px 0; font-size: 14px; }
+dt { color: var(--muted); }
+dd { margin: 0; overflow-wrap: anywhere; }
+dd.mono { font-family: var(--mono); font-size: 12px; }
+ul.notes { margin: 8px 0 0; padding-left: 20px; }
+.actions { margin: 18px 0 6px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { appearance: none; border: 1px solid transparent; border-radius: 8px; padding: 10px 18px; font: 600 15px/1 system-ui, sans-serif; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); border-color: var(--line); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:focus-visible, .board:focus-visible, a:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; margin-top: 12px; }
+.check input { margin-top: 3px; }
+a { color: var(--accent); }
+.dl { font-size: 14px; margin-top: 8px; }
+h3 { font-size: 15px; margin: 22px 0 6px; }
+ol.steps { margin: 0; padding-left: 22px; }
+ol.steps li { margin: 4px 0; }
+code { font-family: var(--mono); font-size: 13px; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+.status { margin-top: 12px; font-size: 14px; min-height: 1.5em; }
+.status.bad { color: var(--bad); } .status.ok { color: var(--ok); }
+progress { width: 100%; height: 10px; margin-top: 8px; accent-color: var(--accent); }
+.passkey { margin-top: 16px; border-radius: 12px; padding: 16px 18px; background: var(--ok-soft); border: 1px solid var(--ok); }
+.passkey .label { font-size: 13px; font-weight: 600; color: var(--ok); text-transform: uppercase; letter-spacing: 0.06em; }
+.passkey .digits { font: 700 clamp(40px, 9vw, 64px)/1.1 var(--mono); letter-spacing: 0.12em; color: var(--ink); margin: 6px 0; }
+.passkey p { margin: 4px 0 0; font-size: 14px; }
+.passkey .mismatch { color: var(--bad); font-weight: 600; }
+.console { margin-top: 14px; }
+.console pre { margin: 8px 0 0; background: var(--console); color: var(--console-ink); border-radius: 8px; padding: 10px 12px; font: 12px/1.45 var(--mono); height: 220px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; }
+td.mono { font-family: var(--mono); font-size: 11px; overflow-wrap: anywhere; }
+.tablewrap { overflow-x: auto; }
+details.images { margin-top: 20px; }
+h3.part { font-size: 16px; margin: 22px 0 0; padding-top: 16px; border-top: 1px solid var(--line); }
+.hint { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
+.box { border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 14px; }
+.box.warn { background: var(--warn-soft); color: var(--warn); }
+.box.bad { background: var(--bad-soft); color: var(--bad); }
+.box.ok { background: var(--ok-soft); color: var(--ok); }
+.box ul { margin: 4px 0 0; padding-left: 20px; }
+.box .btn { margin-top: 8px; }
+.linkbtn { appearance: none; border: 0; background: none; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+summary { cursor: pointer; font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>BLE Board Flasher</h1>
+    <p>Flash the BLE Scroll Ack firmware over USB and read the BLE passkey, or update a board over Bluetooth. BLE control only, no Wi-Fi. One bus: Vehicle CAN.</p>
+    <div class="meta" id="meta">Loading the build list…</div>
+  </header>
+
+  <div class="notice warn"><strong>Early firmware.</strong> The NanoH2 build passed the full validation in the car. On the other boards only the USB flash and the pairing ran, on the bench. The Bluetooth update of this page has not run on a board yet. Flash on the bench, not in the car. After an erase, the board starts with Scroll Ack off and in Listen-Only.</div>
+  <div class="notice bad" id="noserial" hidden>This browser has no Web Serial, so it cannot flash over USB. Use Chrome or Edge on a computer for USB. The Bluetooth update works in this browser.</div>
+  <div class="notice bad" id="nobrowser" hidden>This browser has no Web Serial and no Web Bluetooth. Use Chrome or Edge on a computer, Chrome on Android, or Bluefy on an iPhone.</div>
+
+  <div class="grid">
+    <nav class="card list" id="list" aria-label="Boards"></nav>
+    <section class="card detail">
+      <div id="detail"></div>
+      <div id="usb">
+      <h3 class="part">Flash over USB</h3>
+      <div class="actions">
+        <button class="btn" type="button" id="flash">Flash and read passkey</button>
+        <button class="btn ghost" type="button" id="readonly">Read passkey only</button>
+        <button class="btn ghost" type="button" id="stop" hidden>Stop</button>
+      </div>
+      <label class="check"><input type="checkbox" id="erase" checked>
+        <span>Erase the whole flash first. Keep this on for a first install: the board then makes a new random passkey. Turn it off to keep the passkey, the settings and the bonds.</span></label>
+      <div class="status" id="status" role="status" aria-live="polite"></div>
+      <progress id="progress" max="1" value="0" hidden></progress>
+      <div class="passkey" id="passkey" hidden>
+        <div class="label">BLE passkey</div>
+        <div class="digits" id="digits">------</div>
+        <p id="pkboard"></p>
+        <p>Write these 6 digits on a label on the board. The board shows its passkey only on this USB console. Pair from the app within 5 minutes after power-on.</p>
+        <div class="actions"><button class="btn ghost" type="button" id="copy">Copy</button></div>
+      </div>
+      <details class="console" id="consolebox">
+        <summary>USB console</summary>
+        <pre id="console" aria-label="USB console output"></pre>
+      </details>
+      <div id="steps"></div>
+      </div>
+      <div id="ble">
+        <h3 class="part">Update over Bluetooth</h3>
+        <p class="hint">For a board that runs this firmware already. It works on a phone: Chrome on Android, Bluefy on an iPhone. The board keeps its passkey, its bonds and its settings. The car must be parked, with Autopilot off. Close the control app first: the board takes one link at a time.</p>
+        <div class="actions">
+          <button class="btn" type="button" id="bleconnect">Connect over Bluetooth</button>
+          <button class="btn" type="button" id="blesend" hidden>Send this build</button>
+          <button class="btn ghost" type="button" id="blestop" hidden>Stop the update</button>
+          <button class="btn" type="button" id="bleconfirm" hidden>Confirm the new image</button>
+          <button class="btn ghost" type="button" id="bledisc" hidden>Disconnect</button>
+        </div>
+        <div class="status" id="blestatus" role="status" aria-live="polite"></div>
+        <progress id="bleprogress" max="1" value="0" hidden></progress>
+        <div id="blecheck"></div>
+        <dl id="bleboard" hidden></dl>
+      </div>
+    </section>
+  </div>
+
+  <details class="card detail images">
+    <summary>All images and their SHA-256</summary>
+    <div class="tablewrap"><table id="images"><thead><tr><th>Build</th><th>Chip</th><th>Full image (offset 0)</th><th>SHA-256</th></tr></thead><tbody></tbody></table></div>
+  </details>
+
+  <footer>
+    The pins are the same as in hypery, so a board keeps its wires. A BLE update later refuses an image for another board.
+    Without this page: <code>esptool.py --chip &lt;chip&gt; write_flash 0x0 scrl-&lt;build&gt;-full.bin</code>, then read <code>BLE passkey:</code> on the serial console at 115200 baud.
+  </footer>
+</main>
+
+<script type="module">
+import { ESPLoader, Transport } from "https://unpkg.com/esptool-js@0.7.0/bundle.js";
+import * as SC from "./scrl.js";
+import { BoardLink, pickBoard, bluetoothSupported } from "./ble-update.js";
+
+const $ = id => document.getElementById(id);
+const el = (tag, attrs, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null || v === false) continue;
+    if (k === "text") n.textContent = v; else n.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k != null) n.append(k);
+  return n;
+};
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const hex = b => Array.from(new Uint8Array(b), v => v.toString(16).padStart(2, "0")).join("");
+
+const CHIP_ORDER = ["ESP32-H2", "ESP32-S3", "ESP32"];
+const FLASH_BAUD = 460800;
+const CONSOLE_BAUD = 115200;
+const RECONNECT_MS = 15000;     // the S3 and H2 USB port comes back within a few seconds after a reset
+const PASSKEY_HINT_MS = 20000;  // no passkey line after this: tell the user what to do
+// Firmware 0.2.0: "BLE passkey: 123456 (board lilygo-t2can)". Older: "BLE passkey: 123456".
+const PASSKEY_RE = /BLE passkey: (\d{6})(?: \(board ([\w-]+)\))?/;
+
+let data = null;
+let current = null;     // selected build
+let session = null;     // { stop, port, reader } while the page holds a serial port
+let usbBusy = false;
+const supported = "serial" in navigator;
+const bleSupported = bluetoothSupported();
+if (!supported) $(bleSupported ? "noserial" : "nobrowser").hidden = false;
+// A browser with Bluetooth and no USB (a phone): the Bluetooth update comes first.
+if (!supported && bleSupported) $("usb").before($("ble"));
+
+// ── UI helpers ────────────────────────────────────────────────────────────────
+
+function setStatus(text, tone = "") { const s = $("status"); s.textContent = text; s.className = "status " + tone; }
+function setBusy(busy) {
+  $("flash").disabled = busy || !supported;
+  $("readonly").disabled = busy || !supported;
+  $("stop").hidden = !busy;
+  $("erase").disabled = busy;
+  for (const b of document.querySelectorAll(".board")) b.disabled = busy || !!(ble && ble.updating);
+  usbBusy = busy;
+  bleRender();
+}
+const consoleLines = [];
+function consoleWrite(line) {
+  consoleLines.push(line);
+  if (consoleLines.length > 400) consoleLines.splice(0, consoleLines.length - 400);
+  const pre = $("console");
+  const atEnd = pre.scrollTop + pre.clientHeight >= pre.scrollHeight - 8;
+  pre.textContent = consoleLines.join("\n");
+  if (atEnd) pre.scrollTop = pre.scrollHeight;
+}
+function showPasskey(digits, board) {
+  $("passkey").hidden = false;
+  $("digits").textContent = digits;
+  const p = $("pkboard");
+  p.replaceChildren();
+  if (board && board !== current.board) {
+    p.append(el("span", { class: "mismatch", text: `The board reports the board ID "${board}", not "${current.board}". Check the image.` }));
+  } else if (board) {
+    p.textContent = `Board ID: ${board}`;
+  }
+}
+
+// ── serial ────────────────────────────────────────────────────────────────────
+
+// Open `port` again, or the port that comes back with the same USB IDs after a
+// reset (the S3 and H2 USB port drops during a chip reset). Null after RECONNECT_MS.
+async function reopen(port, info) {
+  const until = Date.now() + RECONNECT_MS;
+  while (Date.now() < until && !session.stop) {
+    const candidates = [port, ...(await navigator.serial.getPorts()).filter(p => p !== port)];
+    for (const p of candidates) {
+      const i = p.getInfo();
+      if (p !== port && (i.usbVendorId !== info.usbVendorId || i.usbProductId !== info.usbProductId)) continue;
+      try { await p.open({ baudRate: CONSOLE_BAUD }); return p; } catch (e) { /* not back yet, or busy */ }
+    }
+    await sleep(300);
+  }
+  return null;
+}
+
+// Reset through RTS (EN), with DTR (IO0) high: the chip boots the app. Same as esptool's hard reset.
+async function resetBoard(port) {
+  await port.setSignals({ dataTerminalReady: false, requestToSend: true });
+  await sleep(120);
+  await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+}
+
+// Read the console until Stop. Follows the port through resets. Shows the passkey.
+async function readConsole(port, { reset }) {
+  const info = port.getInfo();
+  const started = Date.now();
+  let found = false, hinted = false, buf = "";
+  const dec = new TextDecoder();
+  setStatus("Reading the USB console…");
+  $("consolebox").open = true;
+  while (!session.stop) {
+    const p = await reopen(port, info);
+    if (!p) { if (!session.stop) setStatus("The board did not come back on USB. Unplug it, plug it in again, and click \"Read passkey only\".", "bad"); break; }
+    port = p; session.port = p;
+    try {
+      await p.setSignals({ dataTerminalReady: false, requestToSend: false });
+      if (reset) { reset = false; consoleWrite("— reset —"); await resetBoard(p); }
+    } catch (e) { /* the port went away at once: open it again */ }
+    try {
+      const reader = p.readable.getReader();
+      session.reader = reader;
+      // One read at a time: a read that loses the race against the timer stays pending and is used next turn.
+      let pending = null;
+      while (!session.stop) {
+        if (!pending) pending = reader.read();
+        const tick = sleep(1000).then(() => ({ tick: true }));
+        const r = await Promise.race([pending, tick]);
+        if (r.tick) {
+          if (!found && !hinted && Date.now() - started > PASSKEY_HINT_MS) {
+            hinted = true;
+            setStatus("No passkey line yet. Press the reset button of the board, or unplug it and plug it in again.", "bad");
+          }
+          continue;
+        }
+        pending = null;
+        if (r.done) break;
+        buf += dec.decode(r.value, { stream: true });
+        const lines = buf.split(/\r?\n/);
+        buf = lines.pop();
+        for (const raw of lines) {
+          const line = raw.replace(/\x1b\[[0-9;]*m/g, "");
+          consoleWrite(line);
+          const m = line.match(PASSKEY_RE);
+          if (m) {
+            if (!found) setStatus("Passkey read. You can unplug the board.", "ok");
+            found = true;
+            showPasskey(m[1], m[2]);
+          }
+        }
+      }
+      reader.releaseLock();
+    } catch (e) {
+      consoleWrite(`— the port closed (${e.message}) —`);
+    }
+    try { await p.close(); } catch (e) { /* already closed */ }
+  }
+}
+
+async function stopSession() {
+  if (!session) return;
+  session.stop = true;
+  try { await session.reader?.cancel(); } catch (e) { /* ignore */ }
+  try { await session.port?.close(); } catch (e) { /* ignore */ }
+}
+
+// ── Bluetooth update ──────────────────────────────────────────────────────────
+
+let ble = null;            // BoardLink while the page connects or holds a link
+let bleConnecting = false;
+const BU = { text: "", tone: "", canStop: false, stopAsked: false, check: null };
+
+function bleSay(text, tone = "") { BU.text = text; BU.tone = tone; bleRender(); }
+const bleOn = () => !!(ble && ble.connected && ble.status);
+const boardIdOf = link => SC.boardOf(link.info).id;
+const bleMatches = () => bleOn() && current && boardIdOf(ble) === current.board;
+const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+function lockList() { for (const b of document.querySelectorAll(".board")) b.disabled = usbBusy || !!(ble && ble.updating); }
+
+function bleRender() {
+  if (!data) return;
+  const on = bleOn(), sending = !!(ble && ble.updating);
+  const pending = on && ble.has(SC.FLAG.IMAGE_PENDING);
+  $("bleconnect").hidden = !!ble;
+  $("bleconnect").disabled = !bleSupported || usbBusy || bleConnecting;
+  // The board refuses an update while its running image is not confirmed.
+  $("blesend").hidden = !on || sending || pending;
+  $("blesend").disabled = !bleMatches();
+  $("blesend").textContent = current ? `Send ${current.id}` : "Send this build";
+  $("blestop").hidden = !sending || !BU.canStop;
+  $("bleconfirm").hidden = !pending || sending;
+  $("bledisc").hidden = !ble || sending || bleConnecting;
+  const st = $("blestatus");
+  st.textContent = BU.text; st.className = "status " + BU.tone;
+  lockList();
+
+  // The board state.
+  const dl = $("bleboard");
+  if (!on) { dl.hidden = true; dl.replaceChildren(); }
+  else {
+    const S = ble.status, i = ble.info || {}, F = SC.FLAG;
+    const op = S.opMode === 1 ? (ble.has(F.ACTIVE) ? "Active" : "Active is set, but the board is held in Listen-Only") : "Listen-Only";
+    const rows = [
+      ["Board", `${SC.boardName(ble.info)} (${boardIdOf(ble)})`],
+      ["Firmware", `${i.fw || "?"}${pending ? `, not confirmed: it goes back to the old image in ${mmss(ble.pendingLeft())}` : ""}`],
+      ["Op mode", op],
+      ["CAN frames", `${S.rx.all} received${S.rxPin >= 0 ? `, RX on GPIO${S.rxPin}` : ""}`],
+      ["CAN pins", ble.has(F.PINS_CHECKED) ? "named in this build: it can go to Active" : "not named in this build: Listen-Only pin probe"],
+      ["Up", SC.uptimeText(S.uptime)],
+    ];
+    dl.hidden = false;
+    dl.replaceChildren(...rows.flatMap(([k, v]) => [el("dt", { text: k }), el("dd", { text: v })]));
+  }
+
+  // Does the selected build fit the board? What to do with a new image?
+  const box = $("blecheck");
+  const parts = [];
+  if (on && current && !bleMatches()) {
+    const id = boardIdOf(ble);
+    const fits = data.builds.filter(b => b.board === id);
+    parts.push(el("div", { class: "box bad" },
+      `This build is for the board "${current.board}". The connected board is "${id}", and it refuses this build.`,
+      fits.length ? el("div", null, "Builds for this board: ", ...fits.flatMap((b, n) => {
+        const btn = el("button", { class: "linkbtn", type: "button", text: b.id });
+        btn.addEventListener("click", () => select(b.id, true));
+        return n ? [", ", btn] : [btn];
+      })) : null));
+  }
+  if (BU.check && (BU.check.errors.length || BU.check.warnings.length)) {
+    parts.push(el("div", { class: `box ${BU.check.errors.length ? "bad" : "warn"}` },
+      el("ul", null, [...BU.check.errors, ...BU.check.warnings].map(t => el("li", { text: t })))));
+  }
+  if (pending && !sending) {
+    parts.push(el("div", { class: "box warn" },
+      el("strong", { text: "The new image is not confirmed. " }),
+      "It stays in Listen-Only. Check it now: with Vehicle CAN connected and the car awake, the CAN frame count must rise. ",
+      "If it does, confirm the image. If no frames arrive, do not confirm: the board goes back to the old image by itself."));
+  }
+  box.replaceChildren(...parts);
+}
+setInterval(() => { if (bleOn() && ble.has(SC.FLAG.IMAGE_PENDING)) bleRender(); }, 1000);
+
+const pairHint = () => bleSay("Pair now: type the 6-digit passkey of the board when the browser asks. The passkey is on the label of the board.");
+
+async function bleConnect() {
+  let device;
+  try { device = await pickBoard(); } catch (e) {
+    bleSay(e && e.name === "NotFoundError" ? "No board picked." : `Bluetooth: ${e && e.message ? e.message : e}`, e && e.name === "NotFoundError" ? "" : "bad");
+    return;
+  }
+  const link = new BoardLink(device, {
+    onChange: bleRender,
+    onGone: () => { if (ble === link) { ble = null; bleSay("The board disconnected.", "bad"); } },
+  });
+  ble = link; bleConnecting = true; BU.check = null;
+  bleSay(`Connecting to ${link.name}…`);
+  try {
+    await link.open(pairHint);
+    bleSay(`Connected: ${link.name}, firmware ${(link.info && link.info.fw) || "?"}.`, "ok");
+  } catch (e) {
+    link.close();
+    if (ble === link) ble = null;
+    bleSay(`No connection: ${e && e.message ? e.message : e}`, "bad");
+  } finally { bleConnecting = false; bleRender(); }
+}
+
+async function bleSend() {
+  const b = current, link = ble;
+  if (!bleMatches()) return;
+  BU.check = null;
+  const prog = $("bleprogress");
+  try {
+    bleSay("Downloading the app image…");
+    const r = await fetch(`firmware/${b.app}`, { cache: "no-cache" });
+    if (!r.ok) throw new Error(`image download: HTTP ${r.status}`);
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    const sha = await SC.sha256(bytes);
+    if (SC.hex(sha) !== b.app_sha256) throw new Error("the image download is damaged (SHA-256 does not match)");
+    const { errors, warnings, info } = SC.checkImage(bytes, SC.boardOf(link.info));
+    if (!(await SC.appendedHashOk(bytes))) errors.push("The SHA-256 at the end of the image is wrong. The file is damaged.");
+    BU.check = { errors, warnings };
+    if (errors.length) { bleSay("The board would refuse this image. The page sent nothing.", "bad"); return; }
+    const extra = warnings.length ? `\n\n${warnings.join("\n")}` : "";
+    if (!confirm(`Send ${b.id} (firmware ${info.version}) to ${link.name}?\n\nThe car must be parked, with Autopilot off. The board stays in Listen-Only during the update and until you confirm the new image.${extra}`)) { bleSay(""); return; }
+    BU.canStop = false; BU.stopAsked = false;
+    prog.hidden = false; prog.value = 0;
+    const job = link.update({ bytes, sha }, {
+      onText: t => bleSay(t),
+      onBegun: () => { BU.canStop = true; bleRender(); },
+      onProgress: (sent, size) => { prog.max = size; prog.value = sent; bleSay(`Sent ${sent} of ${size} bytes (${Math.floor(sent * 100 / size)} %).`); },
+      onSent: () => { BU.canStop = false; prog.hidden = true; bleRender(); },
+      aborted: () => BU.stopAsked,
+      onPairing: pairHint,
+    });
+    bleRender();
+    const res = await job;
+    bleSay(res.pending ? "The new image runs. Check it, then confirm it." : "The board is back, but it runs the old image: it went back.", res.pending ? "ok" : "bad");
+  } catch (e) {
+    const more = e && e.nextChunk ? ` Send again: the page now writes ${e.nextChunk} bytes at a time.` : "";
+    bleSay(`The update stopped: ${(e && e.message ? e.message : String(e)).replace(/\.$/, "")}. The board keeps its old image.${more}`, "bad");
+  } finally {
+    prog.hidden = true;
+    BU.canStop = false;
+    bleRender();
+  }
+}
+
+async function bleConfirm() {
+  const link = ble;
+  if (!bleOn()) return;
+  if (link.status.rx.all === 0 && !confirm("The board received no CAN frames since it started. Confirm the new image anyway?")) return;
+  try {
+    bleSay("Confirming the image…");
+    const ok = await link.confirmImage();
+    bleSay(ok ? "Confirmed. The board keeps the new image." : "The board still reports the image as not confirmed. Try again.", ok ? "ok" : "bad");
+  } catch (e) { bleSay(`The confirm failed: ${e && e.message ? e.message : e}`, "bad"); }
+}
+
+$("bleconnect").addEventListener("click", bleConnect);
+$("blesend").addEventListener("click", bleSend);
+$("blestop").addEventListener("click", () => { BU.stopAsked = true; BU.canStop = false; bleSay("Stopping the update…"); });
+$("bleconfirm").addEventListener("click", bleConfirm);
+$("bledisc").addEventListener("click", () => { const l = ble; ble = null; if (l) l.close(); BU.check = null; bleSay("Disconnected."); });
+
+// ── actions ───────────────────────────────────────────────────────────────────
+
+// NVS partition in partitions.csv: 0x9000, size 0x10000.
+const NVS_START = 0x9000, NVS_END = 0x19000;
+
+async function loadImage(b) {
+  setStatus("Downloading the image…");
+  const r = await fetch(`firmware/scrl-${b.id}-full.bin`, { cache: "no-cache" });
+  if (!r.ok) throw new Error(`image download: HTTP ${r.status}`);
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  const sha = hex(await crypto.subtle.digest("SHA-256", bytes));
+  if (sha !== b.sha256) throw new Error("the image download is damaged (SHA-256 does not match)");
+  return bytes;
+}
+
+async function flash() {
+  const b = current;
+  $("passkey").hidden = true;
+  let port;
+  try {
+    const image = await loadImage(b);
+    setStatus("Pick the serial port of the board.");
+    port = await navigator.serial.requestPort();
+    session = { stop: false, port };
+    setBusy(true);
+    const terminal = { clean() {}, writeLine: t => consoleWrite(t), write: t => consoleWrite(t) };
+    const transport = new Transport(port, false);
+    const loader = new ESPLoader({ transport, baudrate: FLASH_BAUD, terminal });
+    setStatus("Connecting to the chip… If this takes long, hold BOOT and press RESET on the board.");
+    await loader.main();
+    const chip = loader.chip.CHIP_NAME;
+    if (chip !== b.chip) {
+      await transport.disconnect();
+      throw new Error(`the chip is ${chip}, but this build is for ${b.chip}. Pick the correct board.`);
+    }
+    const erase = $("erase").checked;
+    setStatus(erase ? "Erasing the flash and writing the image… (the erase takes up to 30 s)" : "Writing the image…");
+    const prog = $("progress");
+    prog.hidden = false; prog.value = 0;
+    // The full image runs from 0x0 through the app, so it also covers the NVS
+    // partition (passkey, settings, bonds) with 0xFF. Without the erase, skip
+    // that range: the board keeps its passkey and its bonds, and the phone
+    // does not have to pair again. partitions.csv is the same on every board.
+    const files = erase ? [{ data: image, address: 0 }]
+      : [{ data: image.subarray(0, NVS_START), address: 0 }, { data: image.subarray(NVS_END), address: NVS_END }];
+    await loader.writeFlash({
+      fileArray: files,
+      flashMode: "keep", flashFreq: "keep", flashSize: "keep",
+      eraseAll: erase, compress: true,
+      reportProgress: (i, written, total) => { prog.max = total; prog.value = written; setStatus(`Writing: ${Math.floor(written * 100 / total)} %`); },
+    });
+    prog.hidden = true;
+    setStatus("Written. Resetting the board…");
+    await loader.after("hard_reset");
+    await transport.disconnect();
+    await readConsole(port, { reset: false });
+  } catch (e) {
+    $("progress").hidden = true;
+    if (e && e.name === "NotFoundError") setStatus("No port picked.");
+    else setStatus(`Stopped: ${e && e.message ? e.message : e}`, "bad");
+    try { await port?.close(); } catch (x) { /* ignore */ }
+  } finally {
+    session = null;
+    setBusy(false);
+  }
+}
+
+async function readOnly() {
+  $("passkey").hidden = true;
+  let port;
+  try {
+    setStatus("Pick the serial port of the board.");
+    port = await navigator.serial.requestPort();
+    session = { stop: false, port };
+    setBusy(true);
+    await readConsole(port, { reset: true });
+  } catch (e) {
+    if (e && e.name === "NotFoundError") setStatus("No port picked.");
+    else setStatus(`Stopped: ${e && e.message ? e.message : e}`, "bad");
+  } finally {
+    session = null;
+    setBusy(false);
+  }
+}
+
+$("flash").addEventListener("click", flash);
+$("readonly").addEventListener("click", readOnly);
+$("stop").addEventListener("click", async () => { await stopSession(); setStatus("Stopped. The port is closed."); });
+$("copy").addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("digits").textContent); setStatus("Passkey copied.", "ok"); } catch (e) { setStatus("Copy failed. Write the digits down.", "bad"); }
+});
+setBusy(false);
+
+// ── board list ────────────────────────────────────────────────────────────────
+
+function select(id, fromUser = false) {
+  const b = data.builds.find(x => x.id === id) || data.builds[0];
+  current = b;
+  $("passkey").hidden = true;
+  for (const btn of document.querySelectorAll(".board")) btn.setAttribute("aria-pressed", String(btn.dataset.id === b.id));
+  if (location.hash !== "#" + b.id) history.replaceState(null, "", "#" + b.id);
+  $("detail").replaceChildren(
+    el("h2", { text: b.name }),
+    el("div", { class: "sub", text: `${b.id} · ${b.chip}` }),
+    el("dl", null,
+      el("dt", { text: "CAN" }), el("dd", { text: b.can }),
+      el("dt", { text: "Firmware" }), el("dd", { text: `${data.version} (${data.commit})` }),
+      el("dt", { text: "Image" }), el("dd", { text: `${(b.size / 1048576).toFixed(2)} MB, written at offset 0` }),
+      el("dt", { text: "SHA-256" }), el("dd", { class: "mono", text: b.sha256 })),
+    b.notes.length ? el("ul", { class: "notes" }, b.notes.map(t => el("li", { text: t }))) : null,
+    el("div", { class: "dl" }, "Files: ",
+      el("a", { href: `firmware/scrl-${b.id}-full.bin`, download: true, text: "full image (USB)" }), " · ",
+      el("a", { href: `firmware/${b.app}`, download: true, text: "app image (BLE update)" })));
+  $("flash").textContent = `Flash ${b.chip} and read passkey`;
+  $("steps").replaceChildren(
+    el("h3", { text: "Steps" }),
+    el("ol", { class: "steps" },
+      el("li", { text: "Connect the board with a USB data cable. Do not connect it to the car." }),
+      el("li", { text: "Click \"Flash and read passkey\" and pick the serial port of the board. If no port shows, or the connect fails, hold BOOT while you plug in the cable." }),
+      el("li", { text: "Wait. The page writes the image, resets the board and reads its USB console." }),
+      el("li", { text: "The passkey shows in large digits. Write it on a label on the board." }),
+      el("li", null, "Pair from the app (Car tab > Connect, pick ", el("code", { text: "SCRL-xxxx" }), ") within 5 minutes after power-on. The board support is on the ",
+        el("a", { href: "https://tsl6-app-preview.surge.sh/", text: "preview app" }), " for now."),
+      el("li", { text: "For a board that has the firmware already, click \"Read passkey only\". The page resets the board and reads the passkey." })));
+  if (fromUser && matchMedia("(max-width: 760px)").matches) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  bleRender();
+}
+
+function render() {
+  $("meta").textContent = `Firmware ${data.version} · build ${data.commit} · ${data.builds.length} builds`;
+  const list = $("list");
+  list.replaceChildren();
+  for (const chip of CHIP_ORDER) {
+    const group = data.builds.filter(b => b.chip === chip);
+    if (!group.length) continue;
+    list.append(el("div", { class: "group", text: chip }));
+    for (const b of group) {
+      const btn = el("button", { class: "board", type: "button", "data-id": b.id, "aria-pressed": "false" },
+        b.name, el("span", { class: "id", text: b.id }));
+      btn.addEventListener("click", () => select(b.id, true));
+      list.append(btn);
+    }
+  }
+  $("images").querySelector("tbody").replaceChildren(...data.builds.map(b => el("tr", null,
+    el("td", { text: b.id }), el("td", { text: b.chip }),
+    el("td", null, el("a", { href: `firmware/scrl-${b.id}-full.bin`, download: true, text: `scrl-${b.id}-full.bin` })),
+    el("td", { class: "mono", text: b.sha256 }))));
+  const first = CHIP_ORDER.map(c => data.builds.find(b => b.chip === c)).find(Boolean);
+  select(location.hash.slice(1) || (first && first.id));
+}
+
+window.addEventListener("hashchange", () => data && !session && !(ble && ble.updating) && select(location.hash.slice(1)));
+fetch("builds.json", { cache: "no-cache" })
+  .then(r => { if (!r.ok) throw new Error(`builds.json: HTTP ${r.status}`); return r.json(); })
+  .then(j => { data = j; render(); })
+  .catch(e => { $("meta").textContent = `The build list did not load: ${e.message}`; });
+</script>
+</body>
+</html>

@@ -56,6 +56,19 @@ The options come from `sdkconfig.defaults` (all boards), `sdkconfig.defaults.<ta
 A build directory keeps its `sdkconfig`. After a change of a defaults file, delete `build/<build-id>/` to apply it.
 To change an option of one board, run `idf.py -B build/<build-id> -D SDKCONFIG=build/<build-id>/sdkconfig menuconfig`, then build that board again.
 
+## Flash site
+
+`flash-site/` is a small web page that flashes the full image over USB (Web Serial, esptool-js 0.7.0), resets the board, reads its USB console and shows the BLE passkey in large digits. It also checks the board ID in the passkey line. "Read passkey only" does the same for a board that has the firmware. It needs Chrome or Edge on a computer.
+
+The same page also updates a board over Bluetooth (Web Bluetooth), also from a phone (Chrome on Android, Bluefy on an iPhone). It sends the app image with the protocol of `main/scrl_ota.h`, connects again after the restart, and shows the frame count, the CAN pin state and the time until the rollback. "Confirm the new image" makes the image permanent. `flash-site/scrl.js` is a copy of the codec of the control app (tsl6-webble `public/lib/scrl.js`). `flash-site/ble-update.js` holds the update loop of the app.
+
+1. Run `tools/build-boards.sh`.
+2. Run `tools/make-flash-site.py`. It writes `build/flash-site/` with every full image and app image, their SHA-256 and the board ID. It stops when a build has no image or no text in `flash-site/boards.json`, or when the UUIDs, the commands or the OTA values in `flash-site/scrl.js` differ from `main/scrl_ble.h` and `main/scrl_ota.h`.
+3. Deploy `build/flash-site/` (preview: `surge build/flash-site scrl-flash-preview.surge.sh`).
+
+The site is public to anyone who has the address. It publishes the compiled images, not the source.
+"Erase the whole flash first" is on by default: for a first install the board then makes a new passkey. The page checks the SHA-256 of the download and the chip before it writes.
+
 ## NanoH2: before the first power-up with the Grove cable
 
 The M5Stack sources disagree on which Grove pin is CAN TX (GPIO1 or GPIO2).
@@ -77,7 +90,7 @@ The other boards have known pins and no probe. In Listen-Only the TWAI backend n
 
 1. Connect the board with a USB data cable. NanoH2: do not feed HPWR+ at the same time.
 2. Run `idf.py -B build/<build-id> -D SDKCONFIG=build/<build-id>/sdkconfig flash monitor`. Or write `build/out/scrl-<build-id>-full.bin` at offset 0 with any ESP flasher.
-3. Read the line `BLE passkey: nnnnnn` on the console. Write the 6 digits on the label of the board.
+3. Read the line `BLE passkey: nnnnnn (board <id>)` on the console. The line repeats every 3 s in the first 2 minutes after a boot and while the pairing window is open. The USB flash site reads it by itself. Write the 6 digits on the label of the board.
 
 The passkey is random. The board makes it at the first boot and keeps it in NVS. It is not in the source code.
 The board never changes it by itself. A factory reset erases the settings, the counters and the bonds, and keeps the passkey, so the label stays correct. A full flash erase over USB makes a new random one.
@@ -236,6 +249,7 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/scrl_board_desc.*` | Board ID in the image, checked by a BLE update (host-tested) |
 | `main/Kconfig.projbuild`, `boards/` | Board choice and the options of each build |
 | `tools/build-boards.sh` | Builds every board |
+| `flash-site/`, `tools/make-flash-site.py` | Flash site (USB flash, Bluetooth update): page, board texts, generator |
 
 ## Tests
 

@@ -1,0 +1,99 @@
+{
+  "about": "Text for the flash site, one entry per build in boards/. tools/make-flash-site.py adds the target, the image and its SHA-256. Keep the pins equal to main/scrl_board.h.",
+  "builds": {
+    "nanoh2-minican": {
+      "name": "M5Stack NanoH2 + Unit Mini CAN",
+      "can": "TWAI, Grove port: TX GPIO2, RX GPIO1",
+      "notes": [
+        "TX = GPIO2, RX = GPIO1. This wiring passed the full validation in the car on a Unit Mini CAN with the Grove cable (2026-11-20).",
+        "With another cable or another unit, measure continuity first: GPIO2 must go to TXD of the transceiver. For the other wiring, build the firmware with the other pin choice (see the firmware README).",
+        "After the first flash, stay in Listen-Only until frames arrive."
+      ]
+    },
+    "m5stack-atom": {
+      "name": "M5Stack ATOM Lite + ATOMIC CAN Base",
+      "can": "TWAI: TX 22, RX 19",
+      "notes": [
+        "Pins as in hypery. If no frames arrive, try the TX/RX swapped build."
+      ]
+    },
+    "m5stack-atom-matrix": {
+      "name": "M5Stack ATOM Matrix + ATOMIC CAN Base",
+      "can": "TWAI: TX 22, RX 19",
+      "notes": [
+        "The front button (GPIO39) opens the pairing window."
+      ]
+    },
+    "m5stack-atom-swap-pins": {
+      "name": "M5Stack ATOM Lite + ATOMIC CAN Base, TX/RX swapped",
+      "can": "TWAI: TX 19, RX 22",
+      "notes": [
+        "For an ATOMIC CAN Base that is wired the other way round."
+      ]
+    },
+    "esp32-generic-twai": {
+      "name": "ESP32 DevKit + SN65HVD230",
+      "can": "TWAI: TX 21, RX 22",
+      "notes": []
+    },
+    "esp32-generic-twai-sniffer": {
+      "name": "ESP32 DevKit + SN65HVD230, listen only",
+      "can": "TWAI: TX 21, RX 22",
+      "notes": [
+        "This build never sends. Use it to watch the bus."
+      ]
+    },
+    "esp32-mcp2515": {
+      "name": "ESP32 + MCP2515 module",
+      "can": "MCP2515: SCK 18, MISO 19, MOSI 23, CS 5, 8 MHz crystal",
+      "notes": [
+        "For a module with a 16 MHz crystal, build the firmware with the crystal option. A wrong crystal gives a wrong bit rate."
+      ]
+    },
+    "esp32-lilygo": {
+      "name": "LilyGO T-CAN485",
+      "can": "TWAI: TX 27, RX 26",
+      "notes": []
+    },
+    "ttgo-tdisplay": {
+      "name": "TTGO T-Display + MCP2515",
+      "can": "MCP2515: SCK 33, MISO 32, MOSI 25, CS 26, 8 MHz crystal",
+      "notes": [
+        "MISO needs a 5 V to 3.3 V divider, as in hypery. The display stays off."
+      ]
+    },
+    "lilygo-t2can": {
+      "name": "LilyGO T-2CAN, can0 (CAN B terminal)",
+      "can": "TWAI: TX 7, RX 6",
+      "notes": [
+        "Vehicle CAN on the CAN B terminal. The MCP2515 (CAN A) stays off the bus."
+      ]
+    },
+    "lilygo-t2can-can1": {
+      "name": "LilyGO T-2CAN, can1 (CAN A terminal)",
+      "can": "MCP2515: SPI, INT 8, RST 9, 16 MHz crystal",
+      "notes": [
+        "Vehicle CAN on the CAN A terminal, as in hypery's wiring table."
+      ]
+    },
+    "lilygo-t2can-fd": {
+      "name": "LilyGO T-2CAN FD, can0 (CAN B terminal)",
+      "can": "TWAI: TX 7, RX 6",
+      "notes": [
+        "Vehicle CAN on the CAN B terminal. The MCP2518FD (CAN A) stays off the bus."
+      ]
+    },
+    "lilygo-t2can-fd-can1": {
+      "name": "LilyGO T-2CAN FD, can1 (CAN A terminal)",
+      "can": "MCP2518FD: SPI, polled, 40 MHz crystal",
+      "notes": [
+        "Vehicle CAN on the CAN A terminal. The board measures the crystal before it goes on the bus."
+      ]
+    },
+    "waveshare-s3-can": {
+      "name": "Waveshare ESP32-S3-RS485-CAN",
+      "can": "TWAI: TX 15, RX 16",
+      "notes": []
+    }
+  }
+}
