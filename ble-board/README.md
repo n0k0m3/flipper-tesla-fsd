@@ -8,7 +8,7 @@ Firmware for a small board that runs Scroll Ack with BLE control and no Wi-Fi.
 | Bus | One bus only: Vehicle CAN, 500 kbit/s. On a T-2CAN the other channel stays off the bus |
 | Control | BLE only. No Wi-Fi |
 | Framework | ESP-IDF v5.5 (built with v5.5.6) |
-| Status | **All builds compile. Never ran on hardware, on any board.** |
+| Status | **All builds compile. The NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1, 0.3.2) passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: only BLE pairing ran (a T-2CAN on the bench).** |
 
 The board sends one frame ID only: `0x3C2`, the Scroll Ack tick.
 The Scroll Ack logic is not copied. This app includes `esp32/.firmware/scroll_ack.h` and compiles `esp32/.firmware/fsd_handler.cpp` from their own place.
@@ -250,6 +250,7 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/Kconfig.projbuild`, `boards/` | Board choice and the options of each build |
 | `tools/build-boards.sh` | Builds every board |
 | `flash-site/`, `tools/make-flash-site.py` | Flash site (USB flash, Bluetooth update): page, board texts, generator |
+| `validate-site/`, `tools/make-validate-site.py` | Validation site: page, status rules, generator |
 
 ## Tests
 
@@ -260,12 +261,97 @@ Run `make -C test check` in the repo root. It builds and runs on the host:
 - `test_scrl_status`: the status JSON, the Live record and the event log ring.
 - `test_scrl_spi`: MCP2515 and MCP2518FD packing and bit timing, the filter list, and the board check of an update.
 
+The rule engine of the validation site has its own test. It runs on the output of `test/scrl_vectors`: run `make -C test scrl_vectors && node ble-board/validate-site/engine.test.mjs` in the repo root.
+
 `test/scrl_vectors` is a host tool, not a test. It prints what the firmware packers make and what the firmware readers accept. The control app repo uses it (see "Control app"). Build it with `make -C test scrl_vectors`.
+
+## Validation
+
+Do these checks in order on each board, one group at a time. The [validation site](#validation-site) shows the next check, ticks the checks that the board status can prove, and keeps a tick for the other checks.
+
+Rules:
+- Each ID is stable. The site keeps the result under the ID. Do not rename an ID. Add new rows with new IDs.
+- The Board column is `all`, or the board IDs (Info `board`, `SCRL_BOARD_ID` in `main/Kconfig.projbuild`) that the row is for, with commas between them.
+- Go to Active only in the control app. The site only reads the board.
+- Do not connect two boards to the bus at the same time. Two Active boards send double ticks.
+
+### Bench
+
+No car. USB power from a computer.
+
+| ID | Board | Action | Pass when |
+|---|---|---|---|
+| `nanoh2-continuity` | nanoh2-minican | With nothing powered, measure continuity from NanoH2 GPIO1 and GPIO2 to TJA1051T/3 pin 1 (TXD) and pin 4 (RXD) on the Mini CAN. Write down the GPIO that goes to TXD | GPIO2 goes to TXD and GPIO1 to RXD, as in the `nanoh2-minican` build. Else see [NanoH2](#nanoh2-before-the-first-power-up-with-the-grove-cable) |
+| `usb-flash` | all | Flash the full image over USB with the flash site, or with `idf.py flash` | The board reads its Info over BLE with the firmware version of this README |
+| `passkey-label` | all | Read the line `BLE passkey: nnnnnn (board <id>)` on the USB console. Write the 6 digits on the label | The label has the passkey |
+| `ble-pair` | all | Pair a phone in the first 5 minutes after power-on. Type the passkey | A protected read (Status) works |
+| `defaults-safe` | all | Read the settings of a new board | Scroll Ack is off and the op mode is Listen-Only |
+| `pairing-window` | all | Wait more than 5 minutes after power-on. Try to pair a second phone. Then press the button and try again | The board refuses the bond before the press, and accepts it in the 2 minutes after the press |
+| `forget-bonds` | all | Hold the button for 5 s | The phone must pair again |
+| `factory-reset` | all | Send a factory reset from the control app. Pair again with the same label | The passkey on the label still works. The settings are the defaults |
+| `ble-update` | all | Send an app image over BLE. Connect again and confirm it in 10 minutes | The board runs the new image and the image is confirmed |
+| `update-rollback` | all | Send an app image over BLE and do not confirm it | After 10 minutes the board runs the old image again |
+| `update-wrong-board` | all | Send an app image for another board | The update stops with status `07` and the log line `UPD  image is for board ...` |
+| `bench-replay` | all | Replay a car capture into the board with a USB CAN adapter. Record the bus with a second adapter. Compare the `0x3C2` ticks with the T-2CAN output for the same replay | The ticks agree with the T-2CAN ticks |
+
+### Car, Listen-Only
+
+The board replaces the T-2CAN on the same Vehicle CAN wires. USB power from the glovebox port, with a charge-only cable.
+
+| ID | Board | Action | Pass when |
+|---|---|---|---|
+| `car-install` | all | Unplug the T-2CAN. Connect this board to the same Vehicle CAN wires. Power it with a charge-only cable | The board is on the bus and the T-2CAN is off the bus |
+| `can-running` | all | Wake the car. Connect with the site | The CAN controller runs |
+| `frames-arrive` | all | Keep the car awake | Frames arrive |
+| `nanoh2-rx-pin` | nanoh2-minican | Read the receive pin in the status | The status names GPIO1 or GPIO2 |
+| `nanoh2-pins-agree` | nanoh2-minican | Compare the receive pin with the continuity result | The receive pin is the GPIO that goes to RXD, and frames arrive on it |
+| `vehicle-bus` | all | Keep the car awake for some minutes | Many frames arrive and no `0x370` arrives. A `0x370` means a wrong bus: unplug the board |
+| `see-3c2` | all | Use a steering wheel scroll wheel | `0x3C2` frames arrive |
+| `see-39b` | all | Drive with FSD on | A valid `0x39B` arrives (HW4 seen) |
+| `see-257` | all | Drive | `0x257` arrives. This confirms that the Autopark pause can read the speed on Vehicle CAN |
+| `see-318` | all | Drive. Watch the `0x318` count | `0x318` arrives, so the Tesla OTA gate can close. If it never arrives in a full drive, tick it and write "absent" in the note |
+| `drive-listen` | all | Drive once with FSD on, in Listen-Only. Compare the status with the T-2CAN diagnostics of earlier drives | AP state 6 shows while the board is in Listen-Only |
+| `no-bus-errors` | all | Read the status after 10 minutes or more on the bus | No bus-off event and no dropped frame |
+| `nanoh2-pins-build` | nanoh2-minican | Make sure that the board runs a build that names the CAN pins: `nanoh2-minican`, or your own build with the checked pin choice | The status says that the build names the CAN pins |
+
+### Car, Active
+
+| ID | Board | Action | Pass when |
+|---|---|---|---|
+| `go-active` | all | In the control app, turn Scroll Ack on and set Active | The effective op mode is Active |
+| `tx-allowed` | all | Drive with FSD on | All TX gates are open at the same time |
+| `timer-ticks` | all | Set Timer mode. Drive with FSD on | The board sends ticks in Timer mode |
+| `prompt-3` | all | Set Prompt mode. Drive with FSD on until a hands-on prompt shows | The board sends ticks at hands-on 3 |
+| `prompt-4` | all | Let a prompt go on to level 4 | The board sends ticks at hands-on 4 |
+| `prompt-5` | all | Let a prompt go on to level 5 | The board sends ticks at hands-on 5 |
+| `prompt-clears` | all | Look at the screen at each prompt | The prompt clears after the ticks. On each new level (3 → 4 → 5) one more pair goes out |
+| `tx-no-fail` | all | Read the status after the drive | Ticks went out and no tick failed |
+| `car-no-alerts` | all | After the drive, look for new alerts and faults on the car screen | No new alert and no new fault |
+| `sleep-check` | all | Let the car sleep. See if the glovebox port stays on | You know if the board stays powered while the car sleeps |
+
+### Control app
+
+| ID | Board | Action | Pass when |
+|---|---|---|---|
+| `app-android` | all | Connect with the control app in Chrome on Android. Read Status, change one setting, read the log | Each step works |
+| `app-desktop` | all | Do the same in Chrome or Edge on a computer | Each step works |
+| `app-bluefy` | all | Do the same in Bluefy on an iPhone | Each step works |
+
+### Validation site
+
+`validate-site/` is a web page for the list above. It needs Chrome or Edge with Web Bluetooth, or Bluefy on an iPhone.
+
+1. Run `tools/make-validate-site.py`. It reads the tables of this section, `validate-site/rules.json` (the checks that the board status can prove) and the `SCRL_FLAG_*` bits in `main/scrl_status.h`. It writes `build/validate-site/`. It stops when a rule names an ID that is not in a table, or a flag that does not exist.
+2. Deploy `build/validate-site/` (preview: `surge build/validate-site scrl-validate-preview.surge.sh`).
+
+The page reads Info, Status and Settings, and the Live record once each second. It writes nothing to the board.
+A check that the status proves gets a pass with the firmware version and the time. The pass stays when the counters reset at the next power-on. A pass from older firmware shows as old.
+The other checks have a tick and a note.
+The results stay in the browser. Use Export and Import to move them between the computer (bench) and the phone (car).
 
 ## Not done yet
 
-- A test of the control app with a real board, on Android, on desktop and in Bluefy.
-- A bench replay against the T-2CAN output, and every test on hardware, on every board. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
+- The validation above, on every board except the NanoH2. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
 - The addressable LEDs (ATOM, T-CAN485, Waveshare) and the T-Display LCD show nothing.
 - Settings for AP-First, Soft Engage and Abort Guard.
 - Sleep, if the glovebox port stays on while the car sleeps.

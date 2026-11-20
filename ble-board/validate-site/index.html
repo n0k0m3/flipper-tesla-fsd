@@ -1,0 +1,511 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLE Board Validation</title>
+<meta name="description" content="Checklist for the validation of the BLE Scroll Ack board. It reads the board over BLE and ticks the checks that the status proves.">
+<meta name="robots" content="noindex">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231a7f37'/%3E%3Cpath d='M9 16.5l4.5 4.5L23 11' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #14171c; --muted: #5d6673; --line: #dfe3e8;
+  --accent: #1f6feb; --accent-ink: #ffffff; --accent-soft: #e7f0fe;
+  --warn: #9a5b00; --warn-soft: #fff4e0; --bad: #b42318; --bad-soft: #fdecea; --ok: #1a7f37; --ok-soft: #e6f4ea;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --card: #171b21; --ink: #e8ebef; --muted: #98a2b0; --line: #2a313a;
+    --accent: #4c8dff; --accent-ink: #0b0d10; --accent-soft: #16243a;
+    --warn: #f0b45c; --warn-soft: #2b2112; --bad: #ff8a80; --bad-soft: #2d1614; --ok: #5bd17a; --ok-soft: #12261a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --card: #171b21; --ink: #e8ebef; --muted: #98a2b0; --line: #2a313a;
+  --accent: #4c8dff; --accent-ink: #0b0d10; --accent-soft: #16243a;
+  --warn: #f0b45c; --warn-soft: #2b2112; --bad: #ff8a80; --bad-soft: #2d1614; --ok: #5bd17a; --ok-soft: #12261a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 920px; margin: 0 auto; padding: 24px 16px 48px; }
+header h1 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.01em; }
+header p { margin: 0; color: var(--muted); }
+.meta { font-family: var(--mono); font-size: 12px; color: var(--muted); margin-top: 6px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-top: 16px; }
+.bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bar label { font-size: 14px; color: var(--muted); }
+select, input[type=text], textarea { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; }
+select { max-width: 100%; }
+textarea { width: 100%; font: 12px/1.4 var(--mono); min-height: 64px; }
+.btn { appearance: none; border: 1px solid transparent; border-radius: 8px; padding: 9px 16px; font: 600 14px/1 system-ui, sans-serif; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
+.btn.ghost { background: transparent; color: var(--accent); border-color: var(--line); }
+.btn.small { padding: 6px 10px; font-size: 13px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.conn { font-size: 14px; color: var(--muted); }
+.conn.ok { color: var(--ok); } .conn.bad { color: var(--bad); }
+.notice { border-radius: 10px; padding: 10px 14px; margin-top: 12px; font-size: 14px; }
+.notice.warn { background: var(--warn-soft); color: var(--warn); }
+.notice.bad { background: var(--bad-soft); color: var(--bad); }
+code { font-family: var(--mono); font-size: 0.88em; background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+.next { border: 2px solid var(--accent); }
+.next .label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.07em; color: var(--accent); }
+.next h2 { margin: 6px 0 4px; font-size: 20px; line-height: 1.35; }
+.next .where { font-size: 13px; color: var(--muted); }
+.next .pass { margin-top: 8px; }
+.next.alldone { border-color: var(--ok); }
+.next.alldone .label { color: var(--ok); }
+.kind { display: inline-block; font-size: 12px; font-weight: 600; border-radius: 999px; padding: 1px 9px; margin-left: 6px; vertical-align: 2px; }
+.kind.auto { background: var(--accent-soft); color: var(--accent); }
+.kind.manual { background: var(--line); color: var(--muted); }
+.progress { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.prog .name { font-size: 13px; font-weight: 600; }
+.prog .num { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.prog .track { height: 6px; border-radius: 3px; background: var(--line); margin-top: 4px; overflow: hidden; }
+.prog .fill { height: 100%; background: var(--ok); }
+section.group h2 { font-size: 17px; margin: 0; }
+section.group > p { margin: 4px 0 6px; color: var(--muted); font-size: 14px; }
+.row { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 4px 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+.row.isnext { background: var(--accent-soft); margin: 0 -18px; padding: 12px 18px; }
+.row.other { opacity: 0.55; }
+.chip { font-size: 12px; font-weight: 700; border-radius: 6px; padding: 2px 0; text-align: center; height: fit-content; text-transform: uppercase; letter-spacing: 0.04em; }
+.chip.pass, .chip.done { background: var(--ok-soft); color: var(--ok); }
+.chip.fail { background: var(--bad-soft); color: var(--bad); }
+.chip.old { background: var(--warn-soft); color: var(--warn); }
+.chip.open { background: var(--line); color: var(--muted); }
+.row .id { font: 12px var(--mono); color: var(--muted); }
+.row .act { margin: 2px 0 0; }
+.row .pw { margin: 2px 0 0; font-size: 14px; color: var(--muted); }
+.row .pw b { font-weight: 600; color: var(--ink); }
+.row .ev { margin-top: 4px; font: 12px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.row .ev.bad { color: var(--bad); }
+.row .warnline { margin-top: 6px; font-size: 13px; color: var(--warn); font-weight: 600; }
+.row .ctl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-top: 8px; font-size: 14px; }
+.row .ctl input[type=text] { flex: 1 1 200px; min-width: 0; padding: 5px 8px; font-size: 13px; }
+.row .ctl label { display: flex; gap: 6px; align-items: center; }
+.row .paste { margin-top: 4px; font: 12px var(--mono); color: var(--accent); }
+dl.data { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; margin: 10px 0 0; font-size: 13px; }
+dl.data dt { color: var(--muted); }
+dl.data dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+details summary { cursor: pointer; font-weight: 600; }
+.tools h3 { font-size: 14px; margin: 16px 0 6px; }
+.tools p { font-size: 13px; color: var(--muted); margin: 4px 0; }
+.status { font-size: 13px; margin-top: 6px; min-height: 1.4em; }
+.status.bad { color: var(--bad); } .status.ok { color: var(--ok); }
+footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+@media (max-width: 560px) { .row { grid-template-columns: minmax(0, 1fr); } .chip { width: 76px; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>BLE Board Validation</h1>
+    <p>The checks of the firmware README, in order. Connect a board: the page ticks each check that the board status proves. Tick the other checks by hand.</p>
+    <div class="meta" id="meta">Loading the checks…</div>
+  </header>
+
+  <div class="card">
+    <div class="bar">
+      <label for="board">Board</label>
+      <select id="board"></select>
+      <button class="btn" type="button" id="connect">Connect</button>
+      <button class="btn ghost" type="button" id="disconnect" hidden>Disconnect</button>
+      <span class="conn" id="conn" role="status" aria-live="polite">Not connected</span>
+    </div>
+    <div class="notice bad" id="noble" hidden>This browser has no Web Bluetooth. Use Chrome or Edge on Android or a computer, or Bluefy on an iPhone. The manual ticks, Export and Import still work.</div>
+    <div id="alerts"></div>
+  </div>
+
+  <div class="card next" id="next"></div>
+  <div class="card"><div class="progress" id="progress"></div></div>
+  <div id="groups"></div>
+
+  <details class="card" id="databox">
+    <summary>Board data</summary>
+    <p class="tools" style="margin:6px 0 0;font-size:13px;color:var(--muted)">The last values from the board. The page reads Status and Settings every 5 s, and the Live record each second. It writes nothing to the board.</p>
+    <dl class="data" id="data"><dt>Board</dt><dd>not connected</dd></dl>
+  </details>
+
+  <details class="card tools">
+    <summary>Export, import and test</summary>
+    <h3>Move the results to another device</h3>
+    <p>The results stay in this browser only. Export them here, then import the file on the other device. An import merges by check: the newer result wins.</p>
+    <div class="bar">
+      <button class="btn ghost small" type="button" id="export">Export file</button>
+      <button class="btn ghost small" type="button" id="copy">Copy as text</button>
+      <label class="btn ghost small" style="display:inline-block">Import file<input type="file" id="importfile" accept="application/json,.json" hidden></label>
+    </div>
+    <textarea id="importtext" placeholder="Or paste exported text here" aria-label="Exported text to import" style="margin-top:8px"></textarea>
+    <div class="bar"><button class="btn ghost small" type="button" id="importbtn">Import the pasted text</button></div>
+    <div class="status" id="iostatus" role="status" aria-live="polite"></div>
+
+    <h3>Test the rules with pasted data</h3>
+    <p>Paste the Info, Status and Settings JSON of a board (from the control app log, or from <code>test/scrl_vectors</code>). The page shows what each rule says. It stores nothing from pasted data.</p>
+    <textarea id="pinfo" placeholder='Info JSON, for example {"fw":"0.3.2","board":"nanoh2-minican"}' aria-label="Info JSON"></textarea>
+    <textarea id="pstatus" placeholder="Status JSON" aria-label="Status JSON" style="margin-top:6px"></textarea>
+    <textarea id="psettings" placeholder="Settings JSON" aria-label="Settings JSON" style="margin-top:6px"></textarea>
+    <div class="bar" style="margin-top:6px">
+      <button class="btn ghost small" type="button" id="ptest">Test</button>
+      <button class="btn ghost small" type="button" id="pclear">Clear the test</button>
+    </div>
+    <div class="status" id="pstatusline" role="status" aria-live="polite"></div>
+
+    <h3>Start again</h3>
+    <p>Delete every result and note of the selected board in this browser.</p>
+    <button class="btn ghost small" type="button" id="reset">Delete the results of this board</button>
+  </details>
+
+  <footer>
+    Source: <code>ble-board/README.md</code> (section Validation) and <code>ble-board/validate-site/rules.json</code>. Close the control app before you connect here: the board takes one phone at a time.
+  </footer>
+</main>
+
+<script type="module">
+import { parseStatus, parseLive, parseSettings, makeSample, sentDelta, evalRule, appliesTo, mergeAuto, checkState,
+  isFinished, nextCheck } from "./engine.js";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const md = s => esc(s).replace(/`([^`]+)`/g, "<code>$1</code>");
+const when = iso => { try { return new Date(iso).toLocaleString(); } catch { return iso; } };
+const dec = new TextDecoder();
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const uuid = n => `e591${n.toString(16).padStart(4, "0")}-51ba-4d0b-8422-5cb9dc778552`;
+const U = { service: uuid(1), info: uuid(2), status: uuid(3), live: uuid(4), settings: uuid(5) };
+const KEY = "scrl-validate.v1";
+// Write only when the HTML changed: a Live record comes each second, and a rebuild would drop a tap.
+const put = (el, html) => { if (el._html !== html) { el._html = html; el.innerHTML = html; } };
+const STATE_TEXT = { pass: "pass", done: "done", fail: "fail", old: "old fw", open: "to do" };
+
+let site = null;          // checks.json
+let ctx = null;           // { version, flags }
+let db = { board: null, boards: {} };
+let link = null;          // the BLE connection
+let warns = {};           // check ID -> warn text, from the last sample
+let pasted = null;        // check ID -> result, from the pasted test data
+
+// ---------------------------------------------------------------- storage
+function load() {
+  try { const j = JSON.parse(localStorage.getItem(KEY) || "null"); if (j && typeof j === "object" && j.boards) db = j; } catch { /* storage blocked */ }
+}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(db)); } catch { /* storage blocked */ } }
+function boardDb(id = db.board) {
+  if (!db.boards[id]) db.boards[id] = { fw: null, records: {} };
+  return db.boards[id];
+}
+// The firmware that a pass must match: the connected board, else the last firmware that this board showed.
+const currentFw = () => (link && link.info && link.info.fw) || boardDb().fw || null;
+
+// ---------------------------------------------------------------- render
+function render() {
+  const b = db.board, B = boardDb(), fw = currentFw();
+  const checks = site.checks;
+  const mine = checks.filter(c => appliesTo(c, b));
+  const nx = nextCheck(checks, B.records, b, fw);
+
+  // next action
+  const n = $("next");
+  if (!nx) {
+    n.className = "card next alldone";
+    put(n, `<div class="label">All checks pass</div><h2>Every check for this board is done${fw ? ` on firmware ${esc(fw)}` : ""}.</h2>`);
+  } else {
+    const st = checkState(B.records[nx.id], fw);
+    const auto = !!nx.rule;
+    n.className = "card next";
+    put(n, `<div class="label">Next action${st === "fail" ? " · failed, do it again" : st === "old" ? " · passed on older firmware" : ""}</div>
+      <h2>${md(nx.action)}</h2>
+      <div class="where">${esc(nx.group)} · <code>${esc(nx.id)}</code><span class="kind ${auto ? "auto" : "manual"}">${auto ? "the board status ticks it" : "tick it by hand"}</span></div>
+      <div class="pass"><b>Pass when:</b> ${md(nx.pass)}</div>
+      ${auto && !link ? `<div class="where" style="margin-top:6px">Connect the board to let the page check it.</div>` : ""}
+      ${warns[nx.id] ? `<div class="notice warn">${esc(warns[nx.id])}</div>` : ""}
+      <div class="bar" style="margin-top:12px"><button class="btn small" type="button" data-tick="${esc(nx.id)}">Tick as done</button>
+      <a href="#c-${esc(nx.id)}" style="font-size:14px">Go to the row</a></div>`);
+  }
+
+  // progress per group
+  const groups = [...new Set(checks.map(c => c.group))];
+  put($("progress"), groups.map(g => {
+    const list = mine.filter(c => c.group === g);
+    const done = list.filter(c => isFinished(checkState(B.records[c.id], fw))).length;
+    const pct = list.length ? Math.round((100 * done) / list.length) : 100;
+    return `<div class="prog"><div class="name">${esc(g)}</div><div class="num">${done} of ${list.length}</div>
+      <div class="track"><div class="fill" style="width:${pct}%"></div></div></div>`;
+  }).join(""));
+
+  // groups and rows. A Live record comes each second: keep the note that the user types now.
+  const a = document.activeElement;
+  const typing = a && a.dataset && a.dataset.note ? { id: a.dataset.note, value: a.value, s: a.selectionStart, e: a.selectionEnd } : null;
+  const groupsHtml = groups.map(g => {
+    const list = checks.filter(c => c.group === g);
+    const intro = list[0].groupIntro;
+    return `<section class="card group"><h2>${esc(g)}</h2>${intro ? `<p>${md(intro)}</p>` : ""}${list.map(c => row(c, B, fw, nx)).join("")}</section>`;
+  }).join("");
+  if ($("groups")._html === groupsHtml) return;
+  put($("groups"), groupsHtml);
+  if (typing) {
+    const el = document.querySelector(`[data-note="${CSS.escape(typing.id)}"]`);
+    if (el) { el.value = typing.value; el.focus(); try { el.setSelectionRange(typing.s, typing.e); } catch { /* no selection */ } }
+  }
+}
+
+function row(c, B, fw, nx) {
+  const rec = B.records[c.id] || {};
+  const st = checkState(rec, fw);
+  const other = !appliesTo(c, db.board);
+  let ev = "";
+  if (rec.auto) {
+    const a = rec.auto;
+    ev += `<div class="ev${a.state === "fail" ? " bad" : ""}">${a.state === "pass" ? "Passed" : "Failed"} ${esc(when(a.at))}, firmware ${esc(a.fw || "?")}${a.source === "ble" ? "" : ` (${esc(a.source)})`}${a.evidence ? `: ${esc(a.evidence)}` : ""}</div>`;
+  }
+  if (rec.lastFail && !(rec.auto && rec.auto.state === "fail")) {
+    ev += `<div class="ev bad">Failed once ${esc(when(rec.lastFail.at))}, firmware ${esc(rec.lastFail.fw || "?")}: ${esc(rec.lastFail.evidence || "")}</div>`;
+  }
+  if (rec.manual && rec.manual.done) ev += `<div class="ev">Ticked by hand ${esc(when(rec.manual.at))}</div>`;
+  const p = pasted && pasted[c.id];
+  const pline = p ? `<div class="paste">Pasted data: ${p.state === "none" ? "no evidence" : p.state}${p.evidence ? ` (${esc(p.evidence)})` : ""}${p.warn ? `. ${esc(p.warn)}` : ""}</div>` : "";
+  return `<div class="row${nx && nx.id === c.id ? " isnext" : ""}${other ? " other" : ""}" id="c-${esc(c.id)}">
+    <div class="chip ${st}">${STATE_TEXT[st]}</div>
+    <div>
+      <div class="id">${esc(c.id)}${c.boards ? ` · ${esc(c.boards.join(", "))}` : ""}<span class="kind ${c.rule ? "auto" : "manual"}">${c.rule ? "auto" : "manual"}</span>${other ? " · not for this board" : ""}</div>
+      <p class="act">${md(c.action)}</p>
+      <p class="pw"><b>Pass when:</b> ${md(c.pass)}</p>
+      ${ev}${pline}
+      ${warns[c.id] ? `<div class="warnline">${esc(warns[c.id])}</div>` : ""}
+      <div class="ctl">
+        <label><input type="checkbox" data-done="${esc(c.id)}"${rec.manual && rec.manual.done ? " checked" : ""}> Done by hand</label>
+        <input type="text" data-note="${esc(c.id)}" value="${esc((rec.manual && rec.manual.note) || "")}" placeholder="Note" aria-label="Note for ${esc(c.id)}">
+        ${rec.auto ? `<button class="btn ghost small" type="button" data-clear="${esc(c.id)}">Clear the board result</button>` : ""}
+      </div>
+    </div></div>`;
+}
+
+function setManual(id, patch) {
+  const B = boardDb();
+  const rec = B.records[id] || (B.records[id] = {});
+  rec.manual = { ...(rec.manual || {}), ...patch };
+  if ("done" in patch) rec.manual.at = new Date().toISOString();
+  save();
+}
+
+document.addEventListener("click", e => {
+  const t = e.target.closest("[data-tick],[data-clear]");
+  if (!t) return;
+  if (t.dataset.tick) { setManual(t.dataset.tick, { done: true }); render(); }
+  if (t.dataset.clear && confirm("Delete the stored board result of this check?")) {
+    const rec = boardDb().records[t.dataset.clear];
+    if (rec) { delete rec.auto; delete rec.lastFail; }
+    save(); render();
+  }
+});
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.done) { setManual(t.dataset.done, { done: t.checked }); render(); }
+  if (t.dataset.note !== undefined && t.dataset.note) { setManual(t.dataset.note, { note: t.value.slice(0, 300) }); }
+});
+
+// ---------------------------------------------------------------- rules on a sample
+function evaluate(sample, source) {
+  const b = db.board, B = boardDb(), info = link && link.info;
+  const meta = { at: new Date().toISOString(), fw: (info && info.fw) || null, build: (info && info.build) || null, source };
+  const next = {};
+  for (const c of site.checks) {
+    if (!c.rule || !appliesTo(c, b)) continue;
+    const r = evalRule(c.rule, sample, ctx);
+    if (r.warn) next[c.id] = r.warn;
+    B.records[c.id] = mergeAuto(B.records[c.id], r, meta);
+  }
+  warns = next;
+  save();
+}
+
+function alerts() {
+  const out = [];
+  if (link && link.flags !== null) {
+    const f = link.flags, F = ctx.flags;
+    if (f & F.WRONG_BUS) out.push(["bad", "0x370 seen: this is not Vehicle CAN. The board never sends here. Unplug it and check the wires."]);
+    if (f & F.BUS_OFF_LOCK) out.push(["bad", "3 bus-off events: the board is locked to Listen-Only. Check the wiring and the bit timing."]);
+    if (f & F.IMAGE_PENDING) out.push(["warn", "A new image runs and is not confirmed. Confirm it in the control app in 10 minutes, or it goes back to the old image."]);
+    if ((f & F.OTA_BLIND) && (f & F.CAN_RUNNING)) out.push(["warn", "No 0x318 yet: the Tesla OTA gate cannot close."]);
+  }
+  put($("alerts"), out.map(([k, t]) => `<div class="notice ${k}">${esc(t)}</div>`).join(""));
+}
+
+function showData() {
+  if (!link) { put($("data"), "<dt>Board</dt><dd>not connected</dd>"); return; }
+  const s = link.status, i = link.info || {}, set = link.settings, l = link.live;
+  const names = Object.keys(ctx.flags).filter(n => link.flags !== null && (link.flags & ctx.flags[n]));
+  const rows = [
+    ["Device", link.device.name || "?"], ["Board", i.board || "?"], ["Firmware", `${i.fw || "?"} ${i.build ? `(${i.build})` : ""}`],
+    ["CAN", i.can || "?"],
+  ];
+  if (s) rows.push(
+    ["Frames", `all ${s.rx.all}, 0x3C2 ${s.rx.x3c2}, 0x39B ${s.rx.x39b}, 0x370 ${s.rx.x370}, 0x257 ${s.rx.x257}, 0x318 ${s.rx.x318}, 0x129 ${s.rx.x129}, dropped ${s.rx.dropped}`],
+    ["TX", `ok ${s.tx.ok}, failed ${s.tx.failed}, refused ${s.tx.refused}`],
+    ["Bus-off", s.busOff], ["RX pin", s.rxPin], ["Uptime", `${s.up} s`], ["Power-on count", s.pwr]);
+  rows.push(["AP state, hands-on", `${l ? l.apState : s ? s.apState : "?"}, ${l ? l.handsOn : s ? s.handsOn : "?"}`],
+    ["Sent ticks", l ? l.sent : s ? s.sent : "?"], ["Flags", names.join(" ") || "none"]);
+  if (set) rows.push(["Settings", JSON.stringify(set)]);
+  put($("data"), rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join(""));
+}
+
+// ---------------------------------------------------------------- BLE (read only)
+function conn(text, cls = "") { const c = $("conn"); c.textContent = text; c.className = `conn ${cls}`; }
+
+function takeSample(source = "ble") {
+  if (!link) return;
+  const sample = makeSample({ info: link.info, status: link.status, settings: link.settings, live: link.liveNewer ? link.live : null,
+    prevHandsOn: link.prevHandsOn });
+  const sent = sample.f.sent;
+  if (sample.f.handsOn !== undefined) link.prevHandsOn = sample.f.handsOn;
+  sample.f["d.sent"] = sentDelta(link.prevSent, sent);
+  if (sent !== undefined) link.prevSent = sent;
+  link.flags = sample.flags;
+  evaluate(sample, source);
+  alerts(); showData(); render();
+}
+
+async function read(c) { const v = await c.readValue(); return new Uint8Array(v.buffer, v.byteOffset, v.byteLength); }
+
+async function connect() {
+  if (!navigator.bluetooth) { $("noble").hidden = false; return; }
+  let device;
+  try {
+    device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: "SCRL-" }], optionalServices: [U.service] });
+  } catch (e) { conn(`No board chosen (${e.message || e})`, "bad"); return; }
+  const L = { device, info: null, status: null, settings: null, live: null, liveNewer: false, flags: null, prevSent: null, prevHandsOn: null, chr: {}, timer: 0, busy: false };
+  link = L;
+  $("connect").hidden = true; $("disconnect").hidden = false; $("board").disabled = true;
+  device.addEventListener("gattserverdisconnected", () => { if (link === L) drop("The board disconnected"); });
+  try {
+    conn("Connecting…");
+    const server = await device.gatt.connect();
+    const svc = await server.getPrimaryService(U.service);
+    for (const k of ["info", "status", "live", "settings"]) L.chr[k] = await svc.getCharacteristic(U[k]);
+    L.info = JSON.parse(dec.decode(await read(L.chr.info)));
+    if (L.info.board && site.boards.includes(L.info.board)) { db.board = L.info.board; $("board").value = db.board; }
+    boardDb().fw = L.info.fw || boardDb().fw;
+    save();
+    takeSample();
+    // The first protected read starts the pairing. The board drops a link with no pairing after 30 s.
+    conn("Reading the status. Type the passkey if the phone asks for it…");
+    const until = Date.now() + 45000;
+    while (!L.status && device.gatt.connected && Date.now() < until && link === L) {
+      try { L.status = parseStatus(dec.decode(await read(L.chr.status))); }
+      catch (e) { if (e instanceof SyntaxError || /Status JSON/.test(e.message)) throw e; await sleep(1500); }
+    }
+    if (!L.status) throw new Error(device.gatt.connected ? "no secure link: pair the phone with the passkey on the label" : "the board dropped the link");
+    L.settings = parseSettings(dec.decode(await read(L.chr.settings)));
+    takeSample();
+    L.chr.live.addEventListener("characteristicvaluechanged", ev => {
+      if (link !== L) return;
+      const v = ev.target.value;
+      try { L.live = parseLive(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)); L.liveNewer = true; takeSample(); } catch { /* bad record */ }
+    });
+    await L.chr.live.startNotifications();
+    conn(`Connected: ${device.name || "board"}, ${L.info.board || "?"}, firmware ${L.info.fw || "?"}`, "ok");
+    L.timer = setInterval(async () => {
+      if (link !== L || L.busy || !device.gatt.connected) return;
+      L.busy = true;
+      try {
+        L.status = parseStatus(dec.decode(await read(L.chr.status)));
+        L.liveNewer = false;
+        L.settings = parseSettings(dec.decode(await read(L.chr.settings)));
+        takeSample();
+      } catch (e) { conn(`Read failed: ${e.message || e}`, "bad"); } finally { L.busy = false; }
+    }, 5000);
+  } catch (e) {
+    drop(`Connect failed: ${e.message || e}`);
+    try { device.gatt.disconnect(); } catch { /* gone */ }
+  }
+}
+
+function drop(text) {
+  if (link) clearInterval(link.timer);
+  link = null; warns = {};
+  $("connect").hidden = false; $("disconnect").hidden = true; $("board").disabled = false;
+  conn(text, "bad");
+  alerts(); showData(); render();
+}
+
+$("connect").onclick = connect;
+$("disconnect").onclick = () => { const d = link && link.device; drop("Not connected"); if (d && d.gatt.connected) d.gatt.disconnect(); };
+$("board").onchange = e => { db.board = e.target.value; save(); warns = {}; render(); };
+
+// ---------------------------------------------------------------- export, import, test, reset
+function exportText() { return JSON.stringify({ kind: "scrl-validate", version: 1, exported: new Date().toISOString(), ...db }, null, 1); }
+function io(text, cls = "") { const s = $("iostatus"); s.textContent = text; s.className = `status ${cls}`; }
+$("export").onclick = () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([exportText()], { type: "application/json" }));
+  a.download = `scrl-validation-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  io("File saved.", "ok");
+};
+$("copy").onclick = async () => {
+  try { await navigator.clipboard.writeText(exportText()); io("Copied.", "ok"); } catch { $("importtext").value = exportText(); io("The browser refused the copy. The text is in the box below.", "bad"); }
+};
+const newer = (a, b) => ((a && a.at) || "") >= ((b && b.at) || "") ? a : b;
+function importText(text) {
+  let j;
+  try { j = JSON.parse(text); } catch { io("This is not JSON.", "bad"); return; }
+  if (!j || j.kind !== "scrl-validate" || typeof j.boards !== "object") { io("This is not an export of this page.", "bad"); return; }
+  let n = 0;
+  for (const [bid, inb] of Object.entries(j.boards)) {
+    if (!inb || typeof inb.records !== "object") continue;
+    const B = boardDb(bid);
+    if (inb.fw && !B.fw) B.fw = inb.fw;
+    for (const [cid, r] of Object.entries(inb.records)) {
+      const cur = B.records[cid] || {};
+      const out = { ...cur };
+      for (const k of ["auto", "lastFail", "manual"]) if (r && r[k]) out[k] = cur[k] ? newer(cur[k], r[k]) : r[k];
+      B.records[cid] = out; n++;
+    }
+  }
+  save(); render(); io(`Imported ${n} results.`, "ok");
+}
+$("importfile").onchange = async e => { const f = e.target.files[0]; if (f) importText(await f.text()); e.target.value = ""; };
+$("importbtn").onclick = () => importText($("importtext").value);
+
+$("ptest").onclick = () => {
+  const line = $("pstatusline");
+  try {
+    const parse = (el, fn) => (el.value.trim() ? fn(el.value.trim()) : null);
+    const info = parse($("pinfo"), JSON.parse);
+    const status = parse($("pstatus"), parseStatus);
+    const settings = parse($("psettings"), parseSettings);
+    const sample = makeSample({ info, status, settings, dSent: null });
+    pasted = {};
+    for (const c of site.checks) if (c.rule) pasted[c.id] = evalRule(c.rule, sample, ctx);
+    const pass = Object.values(pasted).filter(r => r.state === "pass").length;
+    const fail = Object.values(pasted).filter(r => r.state === "fail").length;
+    line.textContent = `Tested ${Object.keys(pasted).length} rules: ${pass} pass, ${fail} fail. See the "Pasted data" lines.`;
+    line.className = "status ok";
+  } catch (e) { pasted = null; line.textContent = e.message; line.className = "status bad"; }
+  render();
+};
+$("pclear").onclick = () => { pasted = null; $("pstatusline").textContent = ""; render(); };
+$("reset").onclick = () => {
+  if (!confirm(`Delete every result and note of ${db.board} in this browser?`)) return;
+  delete db.boards[db.board]; save(); render();
+};
+
+// ---------------------------------------------------------------- start
+load();
+try {
+  const r = await fetch("checks.json", { cache: "no-cache" });
+  site = await r.json();
+} catch (e) { $("meta").textContent = `Could not load checks.json: ${e.message}`; throw e; }
+ctx = { version: site.version, flags: site.flags };
+$("meta").textContent = `Firmware ${site.version} · README ${site.commit} · ${site.checks.length} checks, ${site.checks.filter(c => c.rule).length} from the board status`;
+if (!db.board || !site.boards.includes(db.board)) db.board = site.boards.includes("nanoh2-minican") ? "nanoh2-minican" : site.boards[0];
+$("board").innerHTML = site.boards.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join("");
+$("board").value = db.board;
+if (!navigator.bluetooth) $("noble").hidden = false;
+render();
+</script>
+</body>
+</html>
