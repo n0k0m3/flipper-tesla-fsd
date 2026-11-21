@@ -6,7 +6,7 @@
 Reads boards/<build-id>.defaults (target), flash-site/boards.json (text),
 build/out/scrl-<build-id>-full.bin (the image at offset 0, USB) and
 build/out/scrl-<build-id>.bin (the app image, Bluetooth update). Writes
-build/flash-site/: index.html, scrl.js, ble-update.js, builds.json and the
+build/flash-site/: index.html, scrl.js, ble-update.js, builds.json, CORS and the
 images in firmware/.
 
 flash-site/scrl.js is a copy of the protocol codec of the control app. The
@@ -125,6 +125,11 @@ def main() -> None:
         if not m:
             errors.append(f"{bid}: no CONFIG_SCRL_BOARD_ID in {sdk.relative_to(ROOT)}")
             continue
+        # CAN controller of the build, with the names of the image descriptor ("can" in Info).
+        c = re.search(r'^CONFIG_SCRL_CAN_(TWAI|MCP2515|MCP2518FD)=y', sdk.read_text(), re.M)
+        if not c:
+            errors.append(f"{bid}: no CAN controller in {sdk.relative_to(ROOT)}")
+            continue
         data = image.read_bytes()
         app = ROOT / "build" / "out" / f"scrl-{bid}.bin"
         if not app.is_file():
@@ -133,7 +138,8 @@ def main() -> None:
         ver = image_version(app)
         if not ver:
             errors.append(f"{bid}: no app description in {app.relative_to(ROOT)}")
-        builds.append({"id": bid, "version": ver, "board": m.group(1), "target": target, "chip": CHIP_FAMILY[target],
+        builds.append({"id": bid, "version": ver, "board": m.group(1), "can_id": c.group(1).lower(),
+                       "target": target, "chip": CHIP_FAMILY[target],
                        "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
                        "app": app.name, "app_sha256": hashlib.sha256(app.read_bytes()).hexdigest(), **text[bid]})
     extra = sorted(set(text) - known)
@@ -157,6 +163,9 @@ def main() -> None:
         shutil.copy(ROOT / "build" / "out" / f"scrl-{b['id']}-full.bin", OUT / "firmware" / f"scrl-{b['id']}-full.bin")
         shutil.copy(ROOT / "build" / "out" / b["app"], OUT / "firmware" / b["app"])
     (OUT / "builds.json").write_text(json.dumps({"version": version, "commit": commit, "builds": builds}, indent=1) + "\n")
+    # Surge sends CORS headers for every file when the site has this file. The control app (another
+    # origin) then reads builds.json and the app images for its Board firmware page.
+    (OUT / "CORS").write_text("*\n")
     for name in ("index.html", "scrl.js", "ble-update.js"):
         shutil.copy(ROOT / "flash-site" / name, OUT / name)
     print(f"wrote {OUT.relative_to(ROOT)}: {len(builds)} builds, firmware {version} ({commit})")

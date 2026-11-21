@@ -67,6 +67,7 @@ The same page also updates a board over Bluetooth (Web Bluetooth). It worked fro
 3. Deploy `build/flash-site/` (preview: `surge build/flash-site scrl-flash-preview.surge.sh`).
 
 The site is public to anyone who has the address. It publishes the compiled images, not the source.
+The site has a `CORS` file, so the control app (another origin) reads `builds.json` and the app images: its Board firmware page gets the image of the connected board from here. `builds.json` gives each build its board ID and its CAN controller (`can_id`).
 "Erase the whole flash first" is on by default: for a first install the board then makes a new passkey. The page checks the SHA-256 of the download and the chip before it writes.
 
 ## NanoH2: before the first power-up with the Grove cable
