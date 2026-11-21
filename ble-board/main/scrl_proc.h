@@ -34,6 +34,12 @@ void scrl_proc_handle_frame(const CanFrame &frame);
 
 ScrlSettings scrl_proc_get_settings(void);
 
+/** Counts up on each settings change. Safe from any task. */
+uint32_t scrl_proc_settings_gen(void);
+
+/** The TSL6 engine changed its settings itself: copy them, no other change. */
+void scrl_proc_set_tsl6(const uint8_t tsl6[SCRL_TSL6_LEN]);
+
 /**
  * Apply clamped settings. A change of the switch or the mode resets the episode.
  * release_bus_off_lock: the owner wrote op mode Active on purpose. That

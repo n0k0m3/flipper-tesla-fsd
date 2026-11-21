@@ -19,6 +19,11 @@
  * TSL6 setting ID, and each value is the TSL6 raw value, so the control app
  * maps them by name. A value above the maximum of its feature is rejected.
  * A feature with a maximum of 1 also takes true and false.
+ *
+ * "tsl6" is last: the settings of the TSL6 car features engine
+ * (components/tsl6), 28 bytes as 56 hex digits. Bytes 0-11 are the TSL6 A3
+ * status bytes 24-35, bytes 12-27 are A3 bytes 59-74, with the TSL6 bit
+ * layout. The factory value has every car feature off.
  */
 
 #include <stdbool.h>
@@ -62,8 +67,14 @@ static const ScrlFeatureDef SCRL_FEATURE_DEFS[SCRL_F_COUNT] = {
 #undef SCRL_FEATURE_DEF
 };
 
-// Largest settings JSON: the fixed keys, plus each feature as ,"key":255.
+// Largest settings JSON: the fixed keys, each feature as ,"key":255, and "tsl6".
 #define SCRL_SETTINGS_JSON_MAX 512u
+// Settings of the TSL6 engine (TSL6_CFG_LEN in components/tsl6/port/tsl6_engine.h).
+#define SCRL_TSL6_LEN 28u
+// Factory TSL6 settings: A3 bytes 24-35 = 00 00 FF 01 01 00 00 00 01 01 00 00
+// (every car feature off, the engine switch on), A3 bytes 59-74 = 0.
+static const uint8_t SCRL_TSL6_FACTORY[SCRL_TSL6_LEN] = {0x00, 0x00, 0xFF, 0x01, 0x01, 0x00, 0x00,
+                                                       0x00, 0x01, 0x01, 0x00, 0x00};
 // Longest JSON key + 1.
 #define SCRL_SETTINGS_KEY_MAX 32u
 
@@ -76,6 +87,7 @@ struct ScrlSettings {
     uint16_t interval_ms;  // Timer interval mean    (NVS scrInt)
     uint8_t op_mode;       // OpMode_ListenOnly / OpMode_Active (NVS opMode)
     uint8_t feat[SCRL_F_COUNT];  // ported TSL6 features (NVS blob feat)
+    uint8_t tsl6[SCRL_TSL6_LEN];  // TSL6 engine settings (NVS blob tsl6)
 };
 
 static inline int scrl_feature_find(const char *key) {
@@ -98,6 +110,7 @@ static inline ScrlSettings scrl_settings_defaults(void) {
     s.interval_ms = SCROLL_ACK_INTERVAL_DEFAULT_MS;
     s.op_mode = (uint8_t)OpMode_ListenOnly;
     for (int i = 0; i < (int)SCRL_F_COUNT; i++) s.feat[i] = SCRL_FEATURE_DEFS[i].def;
+    memcpy(s.tsl6, SCRL_TSL6_FACTORY, sizeof(s.tsl6));
     return s;
 }
 
@@ -134,7 +147,8 @@ static inline bool scrl_settings_equal(const ScrlSettings &a, const ScrlSettings
     return a.enabled == b.enabled && a.mode == b.mode && a.pattern == b.pattern &&
            a.delay_ms == b.delay_ms && a.gap_ms == b.gap_ms &&
            a.interval_ms == b.interval_ms && a.op_mode == b.op_mode &&
-           memcmp(a.feat, b.feat, sizeof(a.feat)) == 0;
+           memcmp(a.feat, b.feat, sizeof(a.feat)) == 0 &&
+           memcmp(a.tsl6, b.tsl6, sizeof(a.tsl6)) == 0;
 }
 
 /** Write the settings as JSON. Returns the length, or 0 when out is too small. */
@@ -153,6 +167,15 @@ static inline size_t scrl_settings_to_json(const ScrlSettings &s, char *out, siz
         if (n <= 0 || (size_t)n >= size - len) return 0u;
         len += (size_t)n;
     }
+    static const char hex[] = "0123456789abcdef";
+    if (len + 10u + 2u * SCRL_TSL6_LEN + 1u >= size) return 0u;
+    memcpy(out + len, ",\"tsl6\":\"", 9);
+    len += 9u;
+    for (unsigned i = 0; i < SCRL_TSL6_LEN; i++) {
+        out[len++] = hex[s.tsl6[i] >> 4];
+        out[len++] = hex[s.tsl6[i] & 15u];
+    }
+    out[len++] = '"';
     if (len + 1u >= size) return 0u;
     out[len++] = '}';
     out[len] = '\0';
@@ -229,6 +252,24 @@ static inline bool scrl_json_value(ScrlJsonCursor *c, uint32_t *out, bool *was_b
     return true;
 }
 
+// Read "<56 hex digits>" (upper or lower case) into out.
+static inline bool scrl_json_hex(ScrlJsonCursor *c, uint8_t *out, size_t n) {
+    if (!scrl_json_take(c, '"')) return false;
+    if ((size_t)(c->end - c->p) < 2u * n + 1u) return false;
+    for (size_t i = 0; i < 2u * n; i++) {
+        char ch = c->p[i];
+        uint8_t v;
+        if (ch >= '0' && ch <= '9') v = (uint8_t)(ch - '0');
+        else if (ch >= 'a' && ch <= 'f') v = (uint8_t)(ch - 'a' + 10);
+        else if (ch >= 'A' && ch <= 'F') v = (uint8_t)(ch - 'A' + 10);
+        else return false;
+        out[i / 2u] = (uint8_t)((i & 1u) ? (out[i / 2u] | v) : (v << 4));
+    }
+    if (c->p[2u * n] != '"') return false;
+    c->p += 2u * n + 1u;
+    return true;
+}
+
 static inline uint16_t scrl_sat_u16(uint32_t v) {
     return v > 0xFFFFu ? (uint16_t)0xFFFFu : (uint16_t)v;
 }
@@ -258,6 +299,13 @@ static inline ScrlSettingsParse scrl_settings_from_json(const char *buf, size_t 
             bool was_bool = false;
             if (!scrl_json_key(&c, key, sizeof(key))) return ScrlSettingsParse::Syntax;
             if (!scrl_json_take(&c, ':')) return ScrlSettingsParse::Syntax;
+            if (strcmp(key, "tsl6") == 0) {
+                // Raw bytes: the TSL6 engine reads them as the TSL6 did.
+                if (!scrl_json_hex(&c, next.tsl6, SCRL_TSL6_LEN)) return ScrlSettingsParse::BadValue;
+                if (scrl_json_take(&c, ',')) continue;
+                if (scrl_json_take(&c, '}')) break;
+                return ScrlSettingsParse::Syntax;
+            }
             if (!scrl_json_value(&c, &value, &was_bool)) return ScrlSettingsParse::Syntax;
 
             int feature = scrl_feature_find(key);

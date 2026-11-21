@@ -4,7 +4,8 @@
  *
  * Tasks:
  *   can           takes frames from the CAN backend, runs the frame logic,
- *                 sends the ticks, and owns the CAN controller
+ *                 sends the ticks, runs the TSL6 engine (scrl_tsl6.h), and
+ *                 owns the CAN controller
  *   mcp2515/fd    SPI builds only: polls the CAN controller (scrl_can_hw.h)
  *   housekeeping  button, console copy of the event log, BLE notifications,
  *                 update time limits, delayed restart
@@ -32,13 +33,16 @@
 #include "scrl_proc.h"
 #include "scrl_spi.h"
 #include "scrl_store.h"
+#include "scrl_tsl6.h"
 
 static const char *TAG = "scrl";
 
 // Above the NimBLE host task, below the BLE controller task: frame handling
 // goes before BLE work, and the radio timing stays intact.
 #define CAN_TASK_PRIORITY (configMAX_PRIORITIES - 3)
-#define CAN_TASK_STACK 4096
+#define CAN_TASK_STACK 6144  // the TSL6 engine calls nest deeper than the Scroll Ack code
+// Longest wait for a frame: the CAN task also checks the bus and the settings.
+#define CAN_RX_WAIT_MS 20u
 #define HOUSEKEEPING_PRIORITY 3
 #define HOUSEKEEPING_STACK 6144
 #define HOUSEKEEPING_PERIOD_MS 100u
@@ -100,6 +104,7 @@ void scrl_app_factory_reset(void) {
     // Stop sending first: the settings go back to off and Listen-Only.
     scrl_proc_set_settings(scrl_settings_defaults(), false);
     scrl_store_factory_reset();
+    scrl_tsl6_erase_store();
     ble_store_clear();
     scrl_app_request_reboot(500);
 }
@@ -264,11 +269,15 @@ static void can_task(void *) {
         }
 
         scrl_capture_can_tick();
+        uint32_t wait_ms = scrl_tsl6_poll();
+        if (wait_ms > CAN_RX_WAIT_MS) wait_ms = CAN_RX_WAIT_MS;
+        if (wait_ms < portTICK_PERIOD_MS) wait_ms = portTICK_PERIOD_MS;  // never spin: lower tasks must run
         CanFrame frame;
-        if (scrl_can_receive(&frame, 20)) {
+        if (scrl_can_receive(&frame, wait_ms)) {
             scrl_capture_can_feed(frame.id, frame.ext != 0u, frame.dlc, frame.data,
                                   frame.rx_ms ? frame.rx_ms : scrl_millis());
             scrl_proc_handle_frame(frame);
+            scrl_tsl6_frame(frame);
         }
 
         ScrlCanEvent event = scrl_can_poll_event();
@@ -327,6 +336,7 @@ extern "C" void app_main(void) {
     scrl_store_init();
     s_boot = scrl_store_boot();
     ScrlSettings settings = scrl_store_load_settings();
+    scrl_tsl6_init(settings.tsl6);  // before the CAN task: the engine keeps its own settings
 
     scrl_can_init();
     ScrlCanInfo can;

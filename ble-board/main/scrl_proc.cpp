@@ -45,6 +45,7 @@ static ScrlScrollExt s_scroll_ext;
 static ScrlSettings s_settings;
 static uint32_t s_inhibit;
 static std::atomic<bool> s_active;
+static std::atomic<uint32_t> s_settings_gen;
 
 static uint32_t s_rx_3c2, s_rx_39b, s_rx_370, s_rx_257, s_rx_318, s_rx_129;
 static uint32_t s_first_rx_ms;  // 0 = no frame yet
@@ -234,6 +235,17 @@ void scrl_proc_set_settings(const ScrlSettings &settings, bool release_bus_off_l
     scrl_settings_to_state(s_settings, &s_state);
     if (reset) scroll_ack_reset_episode(&s_scroll);
     update_op_mode();
+    s_settings_gen.fetch_add(1);
+}
+
+uint32_t scrl_proc_settings_gen(void) {
+    return s_settings_gen.load();
+}
+
+void scrl_proc_set_tsl6(const uint8_t tsl6[SCRL_TSL6_LEN]) {
+    ProcLock lock;
+    memcpy(s_settings.tsl6, tsl6, SCRL_TSL6_LEN);
+    s_settings_gen.fetch_add(1);
 }
 
 void scrl_proc_set_inhibit(uint32_t bits, bool on) {

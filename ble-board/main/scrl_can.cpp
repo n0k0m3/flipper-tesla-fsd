@@ -113,10 +113,9 @@ bool scrl_can_receive(CanFrame *out, uint32_t timeout_ms) {
     return xQueueReceive(s_rx_queue, out, pdMS_TO_TICKS(timeout_ms)) == pdTRUE;
 }
 
-bool scrl_can_send(const CanFrame &frame) {
-    bool ok = s_running && !s_listen_only && !s_hw_bus_off.load() &&
-              frame.id == SCRL_CAN_TX_ALLOWED_ID && frame.ext == 0u && frame.req == 0u &&
-              tesla_can_tx_valid(frame.id, frame.dlc);
+static bool send_checked(const CanFrame &frame, bool id_ok) {
+    bool ok = s_running && !s_listen_only && !s_hw_bus_off.load() && id_ok &&
+              frame.ext == 0u && frame.req == 0u && tesla_can_tx_valid(frame.id, frame.dlc);
 #if defined(CONFIG_SCRL_NEVER_TX)
     ok = false;
 #endif
@@ -126,6 +125,14 @@ bool scrl_can_send(const CanFrame &frame) {
     }
     s_tx_queued.fetch_add(1, std::memory_order_relaxed);
     return true;
+}
+
+bool scrl_can_send(const CanFrame &frame) {
+    return send_checked(frame, frame.id == SCRL_CAN_TX_ALLOWED_ID);
+}
+
+bool scrl_can_send_tsl6(const CanFrame &frame) {
+    return send_checked(frame, frame.id != SCRL_CAN_TSL6_DENIED_ID);
 }
 
 ScrlCanEvent scrl_can_poll_event(void) {

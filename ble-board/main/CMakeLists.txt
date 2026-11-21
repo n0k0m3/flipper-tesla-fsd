@@ -15,6 +15,7 @@ set(srcs
     "scrl_proc.cpp"
     "scrl_spi.cpp"
     "scrl_store.cpp"
+    "scrl_tsl6.cpp"
     "${FW_DIR}/fsd_handler.cpp"
 )
 
@@ -32,7 +33,7 @@ idf_component_register(
     INCLUDE_DIRS "." "${FW_DIR}" "${LOGIC_DIR}"
     PRIV_REQUIRES
         esp_driver_twai esp_driver_gpio esp_driver_spi esp_timer
-        nvs_flash bt app_update esp_app_format esp_partition mbedtls
+        nvs_flash bt app_update esp_app_format esp_partition mbedtls tsl6
 )
 
 # The shared headers print uint32_t with %u. That is correct on the host and on

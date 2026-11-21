@@ -8,9 +8,9 @@ Firmware for a small board that runs Scroll Ack with BLE control and no Wi-Fi.
 | Bus | One bus only: Vehicle CAN, 500 kbit/s. On a T-2CAN the other channel stays off the bus |
 | Control | BLE only. No Wi-Fi |
 | Framework | ESP-IDF v5.5 (built with v5.5.6) |
-| Status | **All builds compile. The NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1, 0.3.2) passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: only BLE pairing ran (a T-2CAN on the bench).** |
+| Status | **All builds compile. 0.5.0 adds the TSL6 car features engine: not car-tested. The NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1, 0.3.2) passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: only BLE pairing ran (a T-2CAN on the bench).** |
 
-The board sends one frame ID only: `0x3C2`, the Scroll Ack tick.
+The Scroll Ack code sends one frame ID only: `0x3C2`, the tick. Since firmware 0.5.0 the board also runs the TSL6 car features ([TSL6 car features engine](#tsl6-car-features-engine)). They send only the frames of the features that the owner turns on in the app, and never `0x370`. With the factory settings every car feature is off.
 The Scroll Ack logic is not copied. This app includes `esp32/.firmware/scroll_ack.h` and compiles `esp32/.firmware/fsd_handler.cpp` from their own place.
 
 ## Boards
@@ -121,6 +121,31 @@ Since firmware 0.3.0 the board has some settings of the TSL6 module. Each one is
 
 A value above the maximum of a key is refused, not clamped. The values go in one NVS blob (`feat`), in the order of `SCRL_FEATURES` in `main/scrl_settings.h`. Add new keys only at the end.
 The board uses the shared `scroll_ack.h` of the T-2CAN as it is. `main/scrl_scroll_ext.h` changes the pattern before each step, moves a tick to the right wheel, and sets a fixed Timer interval.
+
+## TSL6 car features engine
+
+Since firmware 0.5.0 the board runs the car code of the TSL6 module (runtime V1.0.00): the C rewrite in the repo `tsl6-firmware`, imported into `components/tsl6/` by `tools/tsl6-import.py`. The modules m2 to m8 and the needed part of m1 are copied as they are. `components/tsl6/IMPORT.md` lists the source commit and every patch. The port adds:
+
+| Part | Job |
+|---|---|
+| `port/tsl6_tmos.c` | The part of the WCH BLE OS (TMOS) that the car code uses: event tasks, timers (0.625 ms ticks), helpers |
+| `port/tsl6_tables.c` | The settings blocks and tables of the TSL6, saved through the board (NVS namespace `tsl6`, one blob per TSL6 flash page) |
+| `port/tsl6_engine.*` | Start-up, frame input, settings, and the send path (`can_tx`) |
+| `port/tsl6_stubs.c` | The TSL6 parts that the board does not have: its own BLE link, buzzer, LED, RF light link, UID check |
+| `gen/` | The TSL6 RAM globals at their stock offsets in 3 regions (3.2 KB), and the table of the BLE ROM functions |
+
+Rules:
+- The engine runs in the CAN task. It reads every received frame and sends through `scrl_can_send_tsl6()`: only in Active (the same Listen-Only holds as for the ticks), any standard ID except `0x370`. `can_tx()` of the engine refuses `0x370` too, and the patched EPAS handler never sends it.
+- The TSL6 scroll tick stays off: `uid_crc_ok()` is 0 in the port. The board's Scroll Ack is the only tick source. The TSL6 activation code (UID CRC, boot flag) is not imported.
+- Settings: the Settings JSON key `tsl6`, 28 bytes as 56 hex digits: the TSL6 A3 status bytes 24-35, then 59-74, with the TSL6 bit layout. The control app writes them from the TSL6 settings rows. The factory value `0000ff010100000001010000` + 32 zeros has every car feature off.
+- A change that the TSL6 code makes itself (key gestures) goes back to the board settings, so the app sees it.
+- A TSL6 chip reset (the factory reset by the car keys) restarts the engine from its saved settings. The board does not restart.
+- The engine needs the frames of the bus. The TWAI boards (the NanoH2 among them) give it every frame. The MCP2515 and MCP2518FD boards load the 6 IDs of `main/scrl_rx_ids.h` as hardware filters, so most features do not act there.
+- Size: about 51 KB of flash and 4.9 KB of RAM.
+
+Host test: `components/tsl6/test/run.sh CAPTURE.log[.gz] [HEX56]` builds the engine for the host (32-bit, with ASan and UBSan) and replays a car capture (candump text). It fails when the factory settings send a frame. Then it turns on each settings bit by itself and prints the IDs that the engine sends. Capture of 2026-11-20 (404 s, 363224 frames): the factory settings sent 0 frames; the bits sent only `0x229`, `0x249`, `0x273`, `0x334`, `0x3C2`, `0x3C3`, `0x3E9`.
+
+Known difference: on the car of the 2026-11-20 capture, `0x334` has the stopping mode at data[3] bits 3:2 and the regen at data[0] bit 7. The TSL6 code writes data[3] bits 7:6 and data[2] bits 4:0. The control app does not show the rows `KERS` and `stoppingMode` for the board.
 
 ## TX gates
 
@@ -243,6 +268,8 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/scrl_status.h` | Status JSON and Live record (host-tested) |
 | `main/scrl_log.h`, `scrl_logbuf.*` | Event log ring (host-tested) and its lock |
 | `main/scrl_store.*` | NVS: settings with the T-2CAN keys, the ported settings blob, boot record, passkey |
+| `main/scrl_tsl6.*` | The TSL6 engine on the board: HAL, settings sync, NVS namespace `tsl6` |
+| `components/tsl6/` | The TSL6 car features engine (see above). `vendor/` and `gen/` come from `tools/tsl6-import.py` |
 | `main/scrl_passkey.h` | Reader for the set-passkey command (host-tested) |
 | `main/scrl_ble.*` | NimBLE service, pairing rules |
 | `main/scrl_ota.*` | BLE update and rollback |
@@ -257,7 +284,7 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 
 Run `make -C test check` in the repo root. It builds and runs on the host:
 - `test_scroll_ack`: the shared Scroll Ack state machine.
-- `test_scrl_settings`: the settings codec, the ported settings and the passkey reader.
+- `test_scrl_settings`: the settings codec, the ported settings, the `tsl6` bytes and the passkey reader.
 - `test_scrl_scroll_ext`: the right wheel, the alternate wheel, the alternate and random tick order, and the fixed interval.
 - `test_scrl_status`: the status JSON, the Live record and the event log ring.
 - `test_scrl_spi`: MCP2515 and MCP2518FD packing and bit timing, the filter list, and the board check of an update.
@@ -351,6 +378,10 @@ The other checks have a tick and a note.
 The results stay in the browser. Use Export and Import to move them between the computer (bench) and the phone (car).
 
 ## Not done yet
+
+- The TSL6 engine is not car-tested. The replay test shows what it sends, not what the car does.
+- The TSL6 actions of the Car tab (A4 to A9: lights, horn, doors, seats), the tables (shortcuts AB, BLE buttons BA, ambient light) and the TSL6 BLE remotes have no path from the app to the engine yet. The engine has the code; the board BLE service has no command for it.
+- `0x334` stopping mode and regen: see [TSL6 car features engine](#tsl6-car-features-engine).
 
 - The validation above, on every board except the NanoH2. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
 - The addressable LEDs (ATOM, T-CAN485, Waveshare) and the T-Display LCD show nothing.

@@ -16,8 +16,11 @@
 #include <stdint.h>
 #include "fsd_handler.h"  // CanFrame
 
-// The only ID this board may send: 0x3C2, the Scroll Ack tick.
+// The only ID that the Scroll Ack code may send: 0x3C2, the tick.
 #define SCRL_CAN_TX_ALLOWED_ID CAN_ID_VCLEFT_SWITCH
+// The TSL6 engine sends the IDs of the features that the owner turned on. It
+// never sends 0x370: the EPAS torque echo faulted the car (traction, VDC).
+#define SCRL_CAN_TSL6_DENIED_ID 0x370u
 // Bus-off events in one power cycle before the board locks itself to Listen-Only.
 #define SCRL_CAN_BUS_OFF_LIMIT 3u
 // Wait this long after a bus-off before the controller restarts.
@@ -60,6 +63,9 @@ bool scrl_can_receive(CanFrame *out, uint32_t timeout_ms);
 
 /** Queue one frame for TX. Returns false when the frame is not sent. */
 bool scrl_can_send(const CanFrame &frame);
+
+/** Queue one frame of the TSL6 engine: any standard ID except SCRL_CAN_TSL6_DENIED_ID. */
+bool scrl_can_send_tsl6(const CanFrame &frame);
 
 /** Report a bus-off, once per event. On an event the controller is already stopped. */
 ScrlCanEvent scrl_can_poll_event(void);

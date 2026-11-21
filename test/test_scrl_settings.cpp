@@ -58,7 +58,8 @@ static void test_round_trip(void) {
     CHECK(n > 0 && n == strlen(json), "to_json returns the length");
     CHECK(strcmp(json, "{\"enabled\":true,\"mode\":1,\"pattern\":2,\"delay_ms\":1234,"
                        "\"gap_ms\":250,\"interval_ms\":4000,\"op_mode\":1,"
-                       "\"lr\":2,\"rand\":0}") == 0,
+                       "\"lr\":2,\"rand\":0,"
+                       "\"tsl6\":\"0000ff01010000000101000000000000000000000000000000000000\"}") == 0,
           "exact JSON text: %s", json);
     ScrlSettings back = scrl_settings_defaults();
     CHECK(parse(json, &back) == ScrlSettingsParse::Ok, "own JSON parses");
@@ -78,7 +79,36 @@ static void test_round_trip(void) {
     big.delay_ms = big.gap_ms = big.interval_ms = 65535;
     big.mode = big.pattern = big.op_mode = 255;
     memset(big.feat, 255, sizeof(big.feat));
+    memset(big.tsl6, 255, sizeof(big.tsl6));
     CHECK(scrl_settings_to_json(big, json, sizeof(json)) > 0, "the worst case fits");
+}
+
+static void test_tsl6(void) {
+    ScrlSettings s = scrl_settings_defaults();
+    CHECK(memcmp(s.tsl6, SCRL_TSL6_FACTORY, SCRL_TSL6_LEN) == 0, "TSL6 factory settings by default");
+    const char *hex = "{\"tsl6\":\"0102030405060708090A0B0C0D0E0F101112131415161718191a1b1c\"}";
+    CHECK(parse(hex, &s) == ScrlSettingsParse::Ok, "tsl6 hex parses");
+    bool ok = true;
+    for (unsigned i = 0; i < SCRL_TSL6_LEN; i++) ok = ok && s.tsl6[i] == i + 1u;
+    CHECK(ok, "tsl6 bytes in order, upper and lower case");
+    CHECK(!s.enabled && s.feat[SCRL_F_RAND] == 1, "a tsl6 write changes nothing else");
+    ScrlSettings before = s;
+    CHECK(parse("{\"tsl6\":\"00\"}", &s) == ScrlSettingsParse::BadValue, "short hex");
+    CHECK(parse("{\"tsl6\":\"0000ff01010000000101000000000000000000000000000000000000000000\"}", &s) ==
+              ScrlSettingsParse::BadValue, "long hex");
+    CHECK(parse("{\"tsl6\":\"0000ff0101000000010100000000000000000000000000000000000000zz\"}", &s) ==
+              ScrlSettingsParse::BadValue, "not hex");
+    CHECK(parse("{\"tsl6\":5}", &s) == ScrlSettingsParse::BadValue, "a number");
+    CHECK(parse("{\"enabled\":true,\"tsl6\":\"00\"}", &s) == ScrlSettingsParse::BadValue,
+          "a bad tsl6 rejects the whole write");
+    CHECK(scrl_settings_equal(s, before), "rejected writes change nothing");
+    CHECK(parse("{\"tsl6\":\"0000ff01010000000101000000000000000000000000000000000000\",\"enabled\":true}",
+                &s) == ScrlSettingsParse::Ok && s.enabled &&
+              memcmp(s.tsl6, SCRL_TSL6_FACTORY, SCRL_TSL6_LEN) == 0,
+          "tsl6 then another key");
+    ScrlSettings other = s;
+    other.tsl6[27] ^= 1u;
+    CHECK(!scrl_settings_equal(s, other), "equal compares the tsl6 bytes");
 }
 
 static void test_features(void) {
@@ -274,6 +304,7 @@ int main(void) {
     test_defaults();
     test_round_trip();
     test_features();
+    test_tsl6();
     test_partial_write();
     test_clamp();
     test_rejects();
