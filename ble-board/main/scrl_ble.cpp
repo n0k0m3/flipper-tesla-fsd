@@ -578,7 +578,11 @@ static int store_status(struct ble_store_status_event *event, void *arg) {
 // A phone that bonded under another layout keeps its cached table, so the
 // board then sends Service Changed (NimBLE keeps it for a bonded phone that
 // is not connected, and sends it at the next connection).
-#define SCRL_GATT_LAYOUT 2u  // 2 = Capture added (0.4.0)
+// 2 = Capture added (0.4.0)
+// 3 = OTA data takes write with response (0.4.2) and TSL6 added (0.6.0).
+//     Both came without a new number, so phones bonded before them kept
+//     the old table (no 000B: the app showed no car buttons).
+#define SCRL_GATT_LAYOUT 3u
 
 static void gatt_layout_check(void) {
     nvs_handle_t h;

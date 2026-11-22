@@ -199,8 +199,17 @@ Name `SCRL-xxxx`. One service, base UUID `e591xxxx-51ba-4d0b-8422-5cb9dc778552`.
 | `0008` | OTA control | Write, Notify | Protocol in `main/scrl_ota.h` |
 | `0009` | OTA data | Write without response, write (0.4.2) | Image chunks. Info `"otaw":1` says that a write with response works: Bluefy on iOS delivers no write without response here |
 | `000A` | Capture | Notify | Capture packets (0.4.0, TWAI boards). The board stays in Listen-Only while a capture runs. Layout in `main/scrl_capture.h` |
+| `000B` | TSL6 | Write, write without response, Notify | The TSL6 app protocol to the TSL6 engine (0.6.0). A subscribe opens the TSL6 link. See `main/scrl_tsl6.h` |
 
 Info is open. Each other characteristic needs an encrypted and authenticated link.
+
+GATT layout: a bonded phone keeps its copy of this table. `SCRL_GATT_LAYOUT` in `main/scrl_ble.cpp` is the number of the table. At boot the board compares it with the number in NVS. When they differ, it sends Service Changed to the bonded phones, and they read the table again. Change the number with each added characteristic and each changed property.
+
+| Layout | Firmware | Change |
+|---|---|---|
+| none | 0.1.0 – 0.3.x | `0002` – `0009` |
+| 2 | 0.4.0 | `000A` Capture |
+| 3 | 0.6.1 | `0009` takes write with response (0.4.2) and `000B` TSL6 (0.6.0). Both came without a new number: an iPhone bonded before 0.6.0 did not see `000B` until it paired again |
 
 Security:
 - LE Secure Connections only, passkey entry, bonding. Pairing without the passkey is refused.
