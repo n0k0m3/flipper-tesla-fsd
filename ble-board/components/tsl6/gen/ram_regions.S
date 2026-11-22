@@ -20,16 +20,30 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_cfg, tsl6_r0 + 0x74
 .globl g_20004078
 .set g_20004078, tsl6_r0 + 0x78
+.globl g_ba_table_p
+.set g_ba_table_p, tsl6_r0 + 0x78
 .globl g_2000407c
 .set g_2000407c, tsl6_r0 + 0x7c
+.globl g_remote_table_p
+.set g_remote_table_p, tsl6_r0 + 0x7c
+.globl g_ab_table_p
+.set g_ab_table_p, tsl6_r0 + 0x80
 .globl g_evt_actions
 .set g_evt_actions, tsl6_r0 + 0x80
 .globl g_rfl_recs
 .set g_rfl_recs, tsl6_r0 + 0x84
+.globl g_rgb_zone_p
+.set g_rgb_zone_p, tsl6_r0 + 0x84
 .globl g_light_recs
 .set g_light_recs, tsl6_r0 + 0x88
+.globl g_rgb_car_p
+.set g_rgb_car_p, tsl6_r0 + 0x88
 .globl g_rfq_task
 .set g_rfq_task, tsl6_r0 + 0x8c
+.globl g_can_ids_p4
+.set g_can_ids_p4, tsl6_r0 + 0x98
+.globl g_can_ids_p5
+.set g_can_ids_p5, tsl6_r0 + 0xa0
 .globl g_app_timer_task
 .set g_app_timer_task, tsl6_r0 + 0xd2
 .globl g_uid_crc_ok
@@ -218,6 +232,8 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_2000416b, tsl6_r0 + 0x16b
 .globl g_2000416c
 .set g_2000416c, tsl6_r0 + 0x16c
+.globl g_20004170
+.set g_20004170, tsl6_r0 + 0x170
 .globl g_20004174
 .set g_20004174, tsl6_r0 + 0x174
 .globl g_gauge_last_ms
@@ -234,6 +250,8 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_20004185, tsl6_r0 + 0x185
 .globl g_20004186
 .set g_20004186, tsl6_r0 + 0x186
+.globl g_20004187
+.set g_20004187, tsl6_r0 + 0x187
 .globl g_20004188
 .set g_20004188, tsl6_r0 + 0x188
 .globl g_btn_lock
@@ -486,6 +504,8 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_2000bfe0, tsl6_r1 + 0x1e0
 .globl g_2000bfe4
 .set g_2000bfe4, tsl6_r1 + 0x1e4
+.globl g_central2
+.set g_central2, tsl6_r1 + 0x1e4
 .globl g_2000bfe5
 .set g_2000bfe5, tsl6_r1 + 0x1e5
 .globl g_2000bfe8
@@ -498,6 +518,8 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_2000bfef, tsl6_r1 + 0x1ef
 .globl g_2000bff0
 .set g_2000bff0, tsl6_r1 + 0x1f0
+.globl g_central
+.set g_central, tsl6_r1 + 0x1f0
 .globl g_2000bff4
 .set g_2000bff4, tsl6_r1 + 0x1f4
 .globl g_2000bff6
@@ -514,6 +536,8 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_2000bfff, tsl6_r1 + 0x1ff
 .globl g_2000c008
 .set g_2000c008, tsl6_r1 + 0x208
+.globl g_remote_links
+.set g_remote_links, tsl6_r1 + 0x208
 .globl g_2000c02c
 .set g_2000c02c, tsl6_r1 + 0x22c
 .globl g_2000c044
@@ -530,6 +554,8 @@ tsl6_r2: .zero 0x79c  /* stock 0x2000c1d4..0x2000c970 */
 .set g_2000c24f, tsl6_r2 + 0x7b
 .globl g_2000c250
 .set g_2000c250, tsl6_r2 + 0x7c
+.globl g_2000c268
+.set g_2000c268, tsl6_r2 + 0x94
 .globl g_2000c273
 .set g_2000c273, tsl6_r2 + 0x9f
 .globl g_2000c284

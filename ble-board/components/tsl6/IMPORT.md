@@ -3,7 +3,7 @@
 Source: tsl6-firmware `911bf5c`, `fw/src` and `fw/include`.
 Made by `tools/tsl6-import.py`. Do not edit `vendor/` or `gen/` by hand.
 
-Globals: 273 names in 3 regions, 3228 bytes. Names without a stock RAM address (functions or not used): 31.
+Globals: 286 names in 3 regions, 3228 bytes. Names without a stock RAM address (functions or not used): 31.
 
 Patches:
 - `include/tsl6.h`: #include "ch32v20x.h"
@@ -14,6 +14,10 @@ Patches:
 - `m3/m3.h`: register uint32_t a0_ __asm__("a0") = (uint32_t)(v);    \
 - `m5/m5.h`: register uint32_t a0_ __asm__("a0") = (uint32_t)(v);     \
 - `m1/epas.c`: c[10] = frame_checksum_last(c);
+- `m8/tick.c`: r = uid_crc_ok();
 - `m4/keys.c`: if (key == 2) {
+- `m7/ble_cmd.c`: block removed: `    /\* OTA commands need no password\. \*/\n.*?        link`
+- `m7/ble_cmd.c`: block removed: `/\* AF: activation code.*?\n}\n`
+- `m7/ble_cmd.c`: block removed: `    case 0xAF:\n        cmd_af_activate\(conn, data, len\);\`
 - `m8/light.c`: `event_fire` in plain C (no pinned registers)
 - `m1/main_helpers.c`: fixed_mode_get, turn_state_get, epas_torque_mode_get, bus_age_clear, bus_alive, range_edge, car_frames_seen, platform_get, frame_slot_copy, tick_is_on from `m1/main.c`

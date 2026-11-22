@@ -1,8 +1,11 @@
 /*
  * tsl6_engine.c — start-up, frame input and settings of the TSL6 engine.
  * The start-up follows the stock app_init: data, tables_load, app timers,
- * features_init, tick_init. Not ported: BLE, LED, buzzer, CAN driver, links,
- * the RF light link (light_init).
+ * the CAN filters of platform 0 (can_init), the link table, features_init,
+ * tick_init, light_init. Not ported: LED, buzzer, the RF packets of the light
+ * link (rf_send is busy: the zone records stay queued; the whole-car records
+ * go to CAN 0x679). The CAN side is in tsl6_can.c, the BLE frame link in
+ * tsl6_ble.c, the central role in tsl6_central.c.
  */
 #include <string.h>
 
@@ -18,11 +21,15 @@ void factory_reset(void);
 void app_timer_init(void);
 void features_init(void);
 uint32_t tick_init(void);
-uint32_t platform_dispatch(uint8_t *f);
 void sport_mode_restore(void);
 void features_off_later(void);
-
-static uint32_t s_tx;
+void links_init(void);
+void can_filter_platform(uint32_t platform);
+void tsl6_ble_reset(void);
+void tsl6_can_reset(void);
+void tsl6_central_reset(void);
+void central_init(void);
+uint32_t light_init(void);
 
 /* The stock .data (0x20004000..0x200040A8) at its offsets in region 0. */
 static void data_init(void)
@@ -53,35 +60,34 @@ void tsl6_init(const tsl6_hal_t *hal)
     memset(tsl6_r1, 0, sizeof(tsl6_r1));
     memset(tsl6_r2, 0, sizeof(tsl6_r2));
     data_init();
+    tsl6_ble_reset();
+    tsl6_can_reset();
+    tsl6_central_reset();
     tables_load();
     app_timer_init();
+    if (hal->central)
+        central_init();  /* stock ble_init: the central role of the BLE remotes */
+    can_filter_platform(0);  /* stock can_init */
+    links_init();
     features_init();
-    tick_init();  /* stays off: uid_crc_ok() is 0 in the port (the board has its own Scroll Ack) */
-    s_tx = 0;
-}
-
-void tsl6_rx(uint32_t id, int ext, uint8_t dlc, const uint8_t *data)
-{
-    tsl6_frame_t f;
-
-    if (ext || id > 0x7FF || dlc > 8)
-        return;
-    memset(&f, 0, sizeof(f));
-    f.id = (uint16_t)id;
-    f.dlc = dlc;
-    memcpy(f.data, data, dlc);
-    if ((g_cfg_block[4] & 8) == 0)  /* master switch on */
-        platform_dispatch((uint8_t *)&f);
+    tick_init();  /* the TSL6 tick stays off (patched tick_start): the board has its own Scroll Ack */
+    light_init(); /* the light records: CAN 0x679 (whole car); the RF zone link has no radio here */
 }
 
 extern uint8_t port_reinit_wanted;  /* tsl6_stubs.c: the stock code asked for a chip reset */
+int tsl6_ble_links(uint16_t out[2]);
 
 uint32_t tsl6_poll(void)
 {
     uint32_t next = port_tmos_run();
     if (port_reinit_wanted) {
         port_reinit_wanted = 0;
+        /* The phone links stay: connect them to the new engine again. */
+        uint16_t links[2];
+        int n = tsl6_ble_links(links);
         tsl6_init(port_hal);
+        for (int i = 0; i < n; i++)
+            tsl6_ble_connect(links[i]);
         /* The reset can follow a factory reset by the car keys (cfg_reset does
            not report it): the board takes the settings again. */
         if (port_hal && port_hal->settings_changed)
@@ -91,18 +97,6 @@ uint32_t tsl6_poll(void)
     return next;
 }
 
-/* The stock code sends through can_tx; every module declares it with its own
-   types, all with the 12-byte frame as the first argument. */
-uint32_t can_tx(void *frame)
-{
-    const tsl6_frame_t *f = (const tsl6_frame_t *)frame;
-    if (!port_hal || !port_hal->send || f->id == 0x370)  /* 0x370: never (the torque echo faulted the car) */
-        return 0;
-    s_tx++;
-    return (uint32_t)port_hal->send(f);
-}
-
-uint32_t tsl6_tx_count(void) { return s_tx; }
 
 void tsl6_cfg_get(uint8_t out[TSL6_CFG_LEN])
 {

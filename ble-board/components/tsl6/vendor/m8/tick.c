@@ -79,9 +79,7 @@ uint32_t tick_start(uint32_t on, uint32_t notify)
     uint32_t r, n;
 
     if (on != 0) {
-        r = uid_crc_ok();
-        if (r == 0)
-            return 0;
+        return 0; /* port: the board's Scroll Ack sends the ticks */
     }
     g_tick_on = (uint8_t)on;
     r = tick_schedule();

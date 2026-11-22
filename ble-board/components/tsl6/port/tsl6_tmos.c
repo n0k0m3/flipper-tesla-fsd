@@ -25,6 +25,12 @@ typedef struct {
 } task_t;
 
 static task_t s_tasks[TASK_MAX];
+uint8_t port_tmos_msg_deallocate(uint8_t *msg);
+
+#define MSG_EVENT 0x8000u
+#define MSG_QUEUE 16
+static uint8_t *s_msgs[TASK_MAX][MSG_QUEUE];
+static uint8_t s_msg_head[TASK_MAX], s_msg_count[TASK_MAX];
 static uint8_t s_ntasks;
 static uint32_t s_rand = 0x2545F491u;
 
@@ -32,16 +38,14 @@ const tsl6_hal_t *port_hal;
 
 static uint32_t now(void) { return port_hal ? port_hal->now_ticks() : 0u; }
 
-void port_tmos_reset(void)
-{
-    memset(s_tasks, 0, sizeof(s_tasks));
-    s_ntasks = 0;
-}
+
 
 uint8_t port_TMOS_ProcessEventRegister(void *cb)
 {
-    if (s_ntasks >= TASK_MAX)
+    if (s_ntasks >= TASK_MAX) {
+        port_resident_trap(0x80);  /* logs: one more task than TASK_MAX */
         return 0xFF;
+    }
     s_tasks[s_ntasks].fn = (task_fn_t)cb;
     return s_ntasks++;
 }
@@ -108,11 +112,71 @@ uint32_t port_tmos_get_task_timer(uint8_t task, uint16_t ev)
     return 0;
 }
 
+/* Messages. The stock code frees some messages and still reads them later:
+   app_timer_start returns 1 on success, and table_send / ba_send_later then
+   free the message that the timer callback reads, and the callback frees it
+   again. On the TSL6 this works, because the TMOS heap keeps a freed block
+   intact until a new allocation takes it. Here a freed message waits in a
+   ring of QUARANTINE blocks before the real free, and a second free of a
+   waiting block does nothing. */
+#define QUARANTINE 16
+static uint8_t *s_freed[QUARANTINE];
+static uint8_t s_freed_next;
+
 uint8_t *port_tmos_msg_allocate(uint32_t len) { return (uint8_t *)calloc(1, len ? len : 1); }
-uint8_t port_tmos_msg_deallocate(uint8_t *msg) { free(msg); return 0; }
-/* Messages between tasks are only used by the BLE parts, which are not ported. */
-uint8_t port_tmos_msg_send(uint8_t task, uint8_t *msg) { (void)task; free(msg); return 1; }
-uint8_t *port_tmos_msg_receive(uint8_t task) { (void)task; return NULL; }
+
+uint8_t port_tmos_msg_deallocate(uint8_t *msg)
+{
+    if (!msg)
+        return 0;
+    for (int i = 0; i < QUARANTINE; i++)
+        if (s_freed[i] == msg)
+            return 0;
+    free(s_freed[s_freed_next]);
+    s_freed[s_freed_next] = msg;
+    s_freed_next = (uint8_t)((s_freed_next + 1) % QUARANTINE);
+    return 0;
+}
+
+void port_tmos_reset(void)
+{
+    for (int k = 0; k < TASK_MAX; k++)
+        while (s_msg_count[k])
+            free(port_tmos_msg_receive((uint8_t)k));
+    memset(s_tasks, 0, sizeof(s_tasks));
+    s_ntasks = 0;
+    for (int i = 0; i < QUARANTINE; i++) {
+        free(s_freed[i]);
+        s_freed[i] = NULL;
+    }
+}
+/* Task messages (the GATT client results of the central role). A message
+   sets event 0x8000 (SYS_EVENT_MSG) of its task; a receive takes the oldest
+   and sets the event again while more wait, as TMOS does. */
+
+uint8_t port_tmos_msg_send(uint8_t task, uint8_t *msg)
+{
+    if (task >= s_ntasks || s_msg_count[task] >= MSG_QUEUE) {
+        port_tmos_msg_deallocate(msg);
+        return 1;
+    }
+    s_msgs[task][(s_msg_head[task] + s_msg_count[task]) % MSG_QUEUE] = msg;
+    s_msg_count[task]++;
+    s_tasks[task].pending |= MSG_EVENT;
+    return 0;
+}
+
+uint8_t *port_tmos_msg_receive(uint8_t task)
+{
+    if (task >= s_ntasks || s_msg_count[task] == 0)
+        return NULL;
+    uint8_t *m = s_msgs[task][s_msg_head[task]];
+    s_msg_head[task] = (uint8_t)((s_msg_head[task] + 1) % MSG_QUEUE);
+    s_msg_count[task]--;
+    if (s_msg_count[task])
+        s_tasks[task].pending |= MSG_EVENT;
+    return m;
+}
 
 uint32_t port_tmos_rand(void)
 {

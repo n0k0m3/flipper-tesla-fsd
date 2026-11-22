@@ -2,9 +2,9 @@
 # come from tools/tsl6-import.py. Each TSL6 module includes its own header by
 # a plain name, so each module directory is on the include path of its own
 # sources only (m2.h, m3.h ... must not shadow each other).
-set(modules m1 m2 m3 m4 m5 m7 m8)
-set(srcs port/tsl6_engine.c port/tsl6_tmos.c port/tsl6_tables.c port/tsl6_stubs.c
-    gen/resident_slots.c gen/ram_regions.S)
+set(modules m1 m2 m3 m4 m5 m6 m7 m8)
+file(GLOB srcs "${CMAKE_CURRENT_LIST_DIR}/port/*.c")
+list(APPEND srcs gen/resident_slots.c gen/ram_regions.S)
 foreach(m ${modules})
     file(GLOB msrcs "${CMAKE_CURRENT_LIST_DIR}/vendor/${m}/*.c")
     list(APPEND srcs ${msrcs})

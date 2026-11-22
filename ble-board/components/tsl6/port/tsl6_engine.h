@@ -26,8 +26,21 @@ extern "C" {
 /* Load the settings (hal->store_read) and start the features. */
 void tsl6_init(const tsl6_hal_t *hal);
 
-/* One received frame. Extended frames are ignored, as on the TSL6. */
+/* One received frame. Extended frames are ignored, as on the TSL6. The frame
+   passes the TSL6 CAN filters of the detected platform first. */
 void tsl6_rx(uint32_t id, int ext, uint8_t dlc, const uint8_t *data);
+
+/* ---- TSL6 BLE frames (tsl6_ble.c): the TSL6 app protocol on a board link ----
+   A link that subscribes to the TSL6 characteristic: tsl6_ble_connect() (it
+   is authorized at once: the board pairing stands for the A8 password; it
+   gets the A0 status). Each write: tsl6_ble_rx(). Frames out: hal->ble_send.
+   At most 2 links, as on the TSL6. */
+int tsl6_ble_connect(uint16_t conn);
+void tsl6_ble_disconnect(uint16_t conn);
+void tsl6_ble_rx(uint16_t conn, const uint8_t *data, uint16_t len);
+
+/* A result of the central role of the board (hal->central). */
+void tsl6_central_event(const tsl6_cev_t *e);
 
 /* Run the timers that are due. Returns the ms until the next one (UINT32_MAX: none). */
 uint32_t tsl6_poll(void);

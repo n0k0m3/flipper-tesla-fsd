@@ -36,8 +36,6 @@ static uint32_t port_resident_trap_02d(void) { return port_resident_trap(0xb4); 
 static uint32_t port_resident_trap_02e(void) { return port_resident_trap(0xb8); }
 static uint32_t port_resident_trap_02f(void) { return port_resident_trap(0xbc); }
 static uint32_t port_resident_trap_030(void) { return port_resident_trap(0xc0); }
-static uint32_t port_resident_trap_031(void) { return port_resident_trap(0xc4); }
-static uint32_t port_resident_trap_032(void) { return port_resident_trap(0xc8); }
 static uint32_t port_resident_trap_033(void) { return port_resident_trap(0xcc); }
 static uint32_t port_resident_trap_034(void) { return port_resident_trap(0xd0); }
 static uint32_t port_resident_trap_035(void) { return port_resident_trap(0xd4); }
@@ -45,24 +43,19 @@ static uint32_t port_resident_trap_036(void) { return port_resident_trap(0xd8); 
 static uint32_t port_resident_trap_037(void) { return port_resident_trap(0xdc); }
 static uint32_t port_resident_trap_038(void) { return port_resident_trap(0xe0); }
 static uint32_t port_resident_trap_039(void) { return port_resident_trap(0xe4); }
-static uint32_t port_resident_trap_03a(void) { return port_resident_trap(0xe8); }
 static uint32_t port_resident_trap_03b(void) { return port_resident_trap(0xec); }
 static uint32_t port_resident_trap_03c(void) { return port_resident_trap(0xf0); }
-static uint32_t port_resident_trap_03d(void) { return port_resident_trap(0xf4); }
 static uint32_t port_resident_trap_03e(void) { return port_resident_trap(0xf8); }
 static uint32_t port_resident_trap_03f(void) { return port_resident_trap(0xfc); }
 static uint32_t port_resident_trap_040(void) { return port_resident_trap(0x100); }
 static uint32_t port_resident_trap_041(void) { return port_resident_trap(0x104); }
 static uint32_t port_resident_trap_042(void) { return port_resident_trap(0x108); }
-static uint32_t port_resident_trap_043(void) { return port_resident_trap(0x10c); }
 static uint32_t port_resident_trap_044(void) { return port_resident_trap(0x110); }
 static uint32_t port_resident_trap_045(void) { return port_resident_trap(0x114); }
 static uint32_t port_resident_trap_046(void) { return port_resident_trap(0x118); }
 static uint32_t port_resident_trap_047(void) { return port_resident_trap(0x11c); }
 static uint32_t port_resident_trap_048(void) { return port_resident_trap(0x120); }
 static uint32_t port_resident_trap_049(void) { return port_resident_trap(0x124); }
-static uint32_t port_resident_trap_04a(void) { return port_resident_trap(0x128); }
-static uint32_t port_resident_trap_04b(void) { return port_resident_trap(0x12c); }
 static uint32_t port_resident_trap_04c(void) { return port_resident_trap(0x130); }
 static uint32_t port_resident_trap_04d(void) { return port_resident_trap(0x134); }
 static uint32_t port_resident_trap_04e(void) { return port_resident_trap(0x138); }
@@ -72,33 +65,23 @@ static uint32_t port_resident_trap_051(void) { return port_resident_trap(0x144);
 static uint32_t port_resident_trap_052(void) { return port_resident_trap(0x148); }
 static uint32_t port_resident_trap_053(void) { return port_resident_trap(0x14c); }
 static uint32_t port_resident_trap_054(void) { return port_resident_trap(0x150); }
-static uint32_t port_resident_trap_055(void) { return port_resident_trap(0x154); }
 static uint32_t port_resident_trap_056(void) { return port_resident_trap(0x158); }
 static uint32_t port_resident_trap_057(void) { return port_resident_trap(0x15c); }
 static uint32_t port_resident_trap_058(void) { return port_resident_trap(0x160); }
 static uint32_t port_resident_trap_059(void) { return port_resident_trap(0x164); }
-static uint32_t port_resident_trap_05a(void) { return port_resident_trap(0x168); }
 static uint32_t port_resident_trap_05b(void) { return port_resident_trap(0x16c); }
-static uint32_t port_resident_trap_05c(void) { return port_resident_trap(0x170); }
 static uint32_t port_resident_trap_05d(void) { return port_resident_trap(0x174); }
 static uint32_t port_resident_trap_05e(void) { return port_resident_trap(0x178); }
-static uint32_t port_resident_trap_05f(void) { return port_resident_trap(0x17c); }
-static uint32_t port_resident_trap_060(void) { return port_resident_trap(0x180); }
 static uint32_t port_resident_trap_061(void) { return port_resident_trap(0x184); }
 static uint32_t port_resident_trap_062(void) { return port_resident_trap(0x188); }
 static uint32_t port_resident_trap_063(void) { return port_resident_trap(0x18c); }
 static uint32_t port_resident_trap_064(void) { return port_resident_trap(0x190); }
 static uint32_t port_resident_trap_065(void) { return port_resident_trap(0x194); }
 static uint32_t port_resident_trap_066(void) { return port_resident_trap(0x198); }
-static uint32_t port_resident_trap_067(void) { return port_resident_trap(0x19c); }
 static uint32_t port_resident_trap_068(void) { return port_resident_trap(0x1a0); }
 static uint32_t port_resident_trap_069(void) { return port_resident_trap(0x1a4); }
 static uint32_t port_resident_trap_06a(void) { return port_resident_trap(0x1a8); }
 static uint32_t port_resident_trap_06b(void) { return port_resident_trap(0x1ac); }
-static uint32_t port_resident_trap_06c(void) { return port_resident_trap(0x1b0); }
-static uint32_t port_resident_trap_06d(void) { return port_resident_trap(0x1b4); }
-static uint32_t port_resident_trap_06e(void) { return port_resident_trap(0x1b8); }
-static uint32_t port_resident_trap_06f(void) { return port_resident_trap(0x1bc); }
 static uint32_t port_resident_trap_070(void) { return port_resident_trap(0x1c0); }
 static uint32_t port_resident_trap_071(void) { return port_resident_trap(0x1c4); }
 static uint32_t port_resident_trap_072(void) { return port_resident_trap(0x1c8); }
@@ -240,8 +223,8 @@ void *const tsl6_resident[203] = {
     (void *)port_resident_trap_02e,
     (void *)port_resident_trap_02f,
     (void *)port_resident_trap_030,
-    (void *)port_resident_trap_031,
-    (void *)port_resident_trap_032,
+    (void *)port_GATT_InitClient,
+    (void *)port_GATT_RegisterForInd,
     (void *)port_resident_trap_033,
     (void *)port_resident_trap_034,
     (void *)port_resident_trap_035,
@@ -249,24 +232,24 @@ void *const tsl6_resident[203] = {
     (void *)port_resident_trap_037,
     (void *)port_resident_trap_038,
     (void *)port_resident_trap_039,
-    (void *)port_resident_trap_03a,
+    (void *)port_GATT_DiscAllChars,
     (void *)port_resident_trap_03b,
     (void *)port_resident_trap_03c,
-    (void *)port_resident_trap_03d,
+    (void *)port_GATT_ReadCharValue,
     (void *)port_resident_trap_03e,
     (void *)port_resident_trap_03f,
     (void *)port_resident_trap_040,
     (void *)port_resident_trap_041,
     (void *)port_resident_trap_042,
-    (void *)port_resident_trap_043,
+    (void *)port_GATT_WriteCharValue,
     (void *)port_resident_trap_044,
     (void *)port_resident_trap_045,
     (void *)port_resident_trap_046,
     (void *)port_resident_trap_047,
     (void *)port_resident_trap_048,
     (void *)port_resident_trap_049,
-    (void *)port_resident_trap_04a,
-    (void *)port_resident_trap_04b,
+    (void *)port_GATT_bm_alloc,
+    (void *)port_GATT_bm_free,
     (void *)port_resident_trap_04c,
     (void *)port_resident_trap_04d,
     (void *)port_resident_trap_04e,
@@ -276,33 +259,33 @@ void *const tsl6_resident[203] = {
     (void *)port_resident_trap_052,
     (void *)port_resident_trap_053,
     (void *)port_resident_trap_054,
-    (void *)port_resident_trap_055,
+    (void *)port_GAP_SetParamValue,
     (void *)port_resident_trap_056,
     (void *)port_resident_trap_057,
     (void *)port_resident_trap_058,
     (void *)port_resident_trap_059,
-    (void *)port_resident_trap_05a,
+    (void *)port_GAPBondMgr_SetParameter,
     (void *)port_resident_trap_05b,
-    (void *)port_resident_trap_05c,
+    (void *)port_GAPBondMgr_PasscodeRsp,
     (void *)port_resident_trap_05d,
     (void *)port_resident_trap_05e,
-    (void *)port_resident_trap_05f,
-    (void *)port_resident_trap_060,
+    (void *)port_GAPRole_TerminateLink,
+    (void *)port_GAPRole_ReadRssiCmd,
     (void *)port_resident_trap_061,
     (void *)port_resident_trap_062,
     (void *)port_resident_trap_063,
     (void *)port_resident_trap_064,
     (void *)port_resident_trap_065,
     (void *)port_resident_trap_066,
-    (void *)port_resident_trap_067,
+    (void *)port_GAPRole_ObserverCancelDiscovery,
     (void *)port_resident_trap_068,
     (void *)port_resident_trap_069,
     (void *)port_resident_trap_06a,
     (void *)port_resident_trap_06b,
-    (void *)port_resident_trap_06c,
-    (void *)port_resident_trap_06d,
-    (void *)port_resident_trap_06e,
-    (void *)port_resident_trap_06f,
+    (void *)port_GAPRole_CentralStartDevice,
+    (void *)port_GAPRole_CentralStartDiscovery,
+    (void *)port_GAPRole_CentralCancelDiscovery,
+    (void *)port_GAPRole_CentralEstablishLink,
     (void *)port_resident_trap_070,
     (void *)port_resident_trap_071,
     (void *)port_resident_trap_072,
