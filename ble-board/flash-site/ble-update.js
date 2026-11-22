@@ -214,7 +214,8 @@ export class BoardLink {
         if (!SC.creditIsWhole(this.otaCredit, chunk, size)) fail(`the link cut a write of ${chunk} bytes`, { cut: true });
         if (!SC.mayWrite(sent, n, this.otaCredit)) continue;
         try {
-          await this.write("otaData", image.bytes.subarray(sent, sent + n), mode === "command");
+          // Send a copy, not a view. Bluefy seems to send the whole buffer of a view, and iOS then refuses the write.
+          await this.write("otaData", image.bytes.slice(sent, sent + n), mode === "command");
         } catch (e) {
           if (!this.gattUp) fail("the board disconnected");
           fail(`the browser refused a write of ${n} bytes (${errText(e)})`, { cut: true });
