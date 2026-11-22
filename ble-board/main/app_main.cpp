@@ -26,6 +26,7 @@
 #include "scrl_ble.h"
 #include "scrl_board.h"
 #include "scrl_capture.h"
+#include "scrl_central.h"
 #include "scrl_can.h"
 #include "scrl_log.h"
 #include "scrl_logbuf.h"
@@ -336,6 +337,7 @@ extern "C" void app_main(void) {
     scrl_store_init();
     s_boot = scrl_store_boot();
     ScrlSettings settings = scrl_store_load_settings();
+    scrl_central_init();            // the BLE remote list, before BLE and the engine start
     scrl_tsl6_init(settings.tsl6);  // before the CAN task: the engine keeps its own settings
 
     scrl_can_init();

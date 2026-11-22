@@ -20,12 +20,13 @@ CONFIG_FREERTOS_HZ=1000
 # and ROM code.
 CONFIG_TWAI_ISR_CACHE_SAFE=y
 
-# BLE: NimBLE, one phone at a time, peripheral only. No Wi-Fi.
+# BLE: NimBLE, one phone at a time. No Wi-Fi. The central and observer roles
+# link the BLE remote buttons of the TSL6 engine (up to 3, scrl_central.h).
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
-CONFIG_BT_NIMBLE_MAX_CONNECTIONS=1
-CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
-CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+CONFIG_BT_NIMBLE_MAX_CONNECTIONS=4
+CONFIG_BT_NIMBLE_ROLE_CENTRAL=y
+CONFIG_BT_NIMBLE_ROLE_OBSERVER=y
 CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU=517
 # NimBLE warnings and errors only: its INFO lines (one per notify) flood the
 # USB console.
@@ -34,10 +35,13 @@ CONFIG_BT_NIMBLE_LOG_LEVEL_WARNING=y
 # The host task also writes NVS and the update image.
 CONFIG_BT_NIMBLE_HOST_TASK_STACK_SIZE=8192
 
-# LE Secure Connections only, with bonds kept in NVS. At most 2 bonds.
-CONFIG_BT_NIMBLE_SM_LEGACY=n
+# Phones: LE Secure Connections only, with the passkey (scrl_ble.cpp checks
+# each link), bonds kept in NVS, at most 2 phone bonds (scrl_ble.cpp counts
+# them). Legacy pairing is built in for the BLE remotes only: scrl_central.cpp
+# allows it during the pairing of a remote. 5 bonds = 2 phones + 3 remotes.
+CONFIG_BT_NIMBLE_SM_LEGACY=y
 CONFIG_BT_NIMBLE_SM_SC=y
 CONFIG_BT_NIMBLE_SM_SC_ONLY=1
 CONFIG_BT_NIMBLE_SM_LVL=4
 CONFIG_BT_NIMBLE_NVS_PERSIST=y
-CONFIG_BT_NIMBLE_MAX_BONDS=2
+CONFIG_BT_NIMBLE_MAX_BONDS=5

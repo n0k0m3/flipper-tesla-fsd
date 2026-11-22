@@ -29,6 +29,7 @@
 #include "scrl_board.h"
 #include "scrl_can.h"
 #include "scrl_capture.h"
+#include "scrl_central.h"
 #include "scrl_logbuf.h"
 #include "scrl_log.h"
 #include "scrl_ota.h"
@@ -36,6 +37,7 @@
 #include "scrl_proc.h"
 #include "scrl_settings.h"
 #include "scrl_status.h"
+#include "scrl_tsl6.h"
 
 extern "C" void ble_store_config_init(void);
 
@@ -56,10 +58,11 @@ static const ble_uuid128_t UUID_LOG = SCRL_UUID(0x07);
 static const ble_uuid128_t UUID_OTA_CTRL = SCRL_UUID(0x08);
 static const ble_uuid128_t UUID_OTA_DATA = SCRL_UUID(0x09);
 static const ble_uuid128_t UUID_CAPTURE = SCRL_UUID(0x0A);
+static const ble_uuid128_t UUID_TSL6 = SCRL_UUID(0x0B);
 
 enum ChrId : intptr_t {
     CHR_INFO, CHR_STATUS, CHR_LIVE, CHR_SETTINGS, CHR_COMMAND, CHR_LOG, CHR_OTA_CTRL, CHR_OTA_DATA,
-    CHR_CAPTURE
+    CHR_CAPTURE, CHR_TSL6
 };
 
 // Advertise once per second (unit 0.625 ms).
@@ -75,7 +78,7 @@ enum ChrId : intptr_t {
     (BLE_GATT_CHR_F_NOTIFY | BLE_GATT_CHR_F_NOTIFY_INDICATE_ENC | BLE_GATT_CHR_F_NOTIFY_INDICATE_AUTHEN)
 
 static uint16_t s_h_info, s_h_status, s_h_live, s_h_settings, s_h_command, s_h_log, s_h_ota_ctrl,
-    s_h_ota_data, s_h_capture;
+    s_h_ota_data, s_h_capture, s_h_tsl6;
 
 static uint32_t s_passkey;
 static uint8_t s_own_addr_type;
@@ -84,7 +87,7 @@ static char s_name[12];
 static std::atomic<uint16_t> s_conn{BLE_HS_CONN_HANDLE_NONE};
 static std::atomic<bool> s_authenticated;
 static std::atomic<uint32_t> s_conn_ms;
-static std::atomic<bool> s_sub_live, s_sub_log, s_sub_ota, s_sub_capture;
+static std::atomic<bool> s_sub_live, s_sub_log, s_sub_ota, s_sub_capture, s_sub_tsl6;
 static std::atomic<uint32_t> s_pair_until_ms;  // the pairing window closes at this time
 static std::atomic<bool> s_pair_open;
 
@@ -97,6 +100,28 @@ static char s_status_json[SCRL_STATUS_JSON_MAX + 1u];
 static size_t s_status_len;
 
 static void advertise(void);
+static uint16_t s_conn_tsl6 = BLE_HS_CONN_HANDLE_NONE;  // NimBLE host task only
+
+// Notifications of one TSL6 frame need this many free msys buffers above the
+// reserve, so Status, Live, Log and an update always find buffers.
+#define TSL6_MSYS_RESERVE 8
+
+bool scrl_ble_tsl6_send(uint16_t conn, const uint8_t *frame, size_t len) {
+    if (conn != s_conn.load() || !s_authenticated.load() || !s_sub_tsl6.load()) return false;
+    uint16_t mtu = ble_att_mtu(conn);
+    if (mtu < 23u || len == 0u) return false;
+    size_t chunk = mtu - 3u;
+    size_t parts = (len + chunk - 1u) / chunk;
+    if ((size_t)os_msys_num_free() < parts + TSL6_MSYS_RESERVE) return false;
+    for (size_t off = 0; off < len; off += chunk) {
+        size_t n = len - off < chunk ? len - off : chunk;
+        struct os_mbuf *om = ble_hs_mbuf_from_flat(frame + off, (uint16_t)n);
+        // The stack frees om, also on an error. A cut frame: the app parser
+        // waits for the next 55 7F, as on a TSL6.
+        if (!om || ble_gatts_notify_custom(conn, s_h_tsl6, om) != 0) return false;
+    }
+    return true;
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -266,7 +291,7 @@ static int write_command(const uint8_t *data, size_t len) {
     }
 }
 
-static const char *const CHR_NAMES[] = {"info", "status", "live", "settings", "command", "log", "ota_ctrl", "ota_data", "capture"};
+static const char *const CHR_NAMES[] = {"info", "status", "live", "settings", "command", "log", "ota_ctrl", "ota_data", "capture", "tsl6"};
 
 static int access_read(ChrId id, struct ble_gatt_access_ctxt *ctxt) {
     switch (id) {
@@ -326,6 +351,11 @@ static int access_write(uint16_t conn, ChrId id, struct ble_gatt_access_ctxt *ct
             notify(s_h_ota_ctrl, event, sizeof(event));
         }
         return 0;
+    case CHR_TSL6:
+        // The frames go to the engine in the CAN task. A full buffer drops the
+        // write; the TSL6 parser then waits for the next 55 7F.
+        scrl_tsl6_ble_event(SCRL_TSL6_EV_DATA, conn, buf, len);
+        return 0;
     default:
         return BLE_ATT_ERR_WRITE_NOT_PERMITTED;
     }
@@ -351,8 +381,10 @@ static const struct ble_gatt_chr_def s_chrs[] = {
     // chunk, so it is slower but iOS cannot drop it. Info says "otaw":1.
     SCRL_CHR(UUID_OTA_DATA, CHR_OTA_DATA,
              BLE_GATT_CHR_F_WRITE_NO_RSP | BLE_GATT_CHR_F_WRITE | WRITE_AUTH_FLAGS, s_h_ota_data),
-    // Last: the handles of the older characteristics stay the same.
+    // At the end: the handles of the older characteristics stay the same.
     SCRL_CHR(UUID_CAPTURE, CHR_CAPTURE, NOTIFY_AUTH, s_h_capture),
+    SCRL_CHR(UUID_TSL6, CHR_TSL6,
+             BLE_GATT_CHR_F_WRITE_NO_RSP | BLE_GATT_CHR_F_WRITE | WRITE_AUTH_FLAGS | NOTIFY_AUTH, s_h_tsl6),
     {.uuid = nullptr, .access_cb = nullptr, .arg = nullptr, .descriptors = nullptr, .flags = 0,
      .min_key_size = 0, .val_handle = nullptr, .cpfd = nullptr},
 };
@@ -372,7 +404,20 @@ static void link_down(void) {
     s_sub_log.store(false);
     s_sub_ota.store(false);
     s_sub_capture.store(false);  // the capture task stops the capture
+    if (s_sub_tsl6.exchange(false)) scrl_tsl6_ble_event(SCRL_TSL6_EV_CLOSE, s_conn_tsl6, nullptr, 0);
     scrl_ota_link_lost();
+}
+
+// Bonds of phones: every bond that does not belong to a BLE remote.
+#define SCRL_BLE_PHONE_BONDS 2
+static int phone_bonds(void) {
+    ble_addr_t peers[MYNEWT_VAL(BLE_STORE_MAX_BONDS)];
+    int n = 0;
+    if (ble_store_util_bonded_peers(peers, &n, MYNEWT_VAL(BLE_STORE_MAX_BONDS)) != 0) return 0;
+    int phones = 0;
+    for (int i = 0; i < n; i++)
+        if (!scrl_central_is_remote(&peers[i])) phones++;
+    return phones;
 }
 
 static int gap_event(struct ble_gap_event *event, void *) {
@@ -419,6 +464,13 @@ static int gap_event(struct ble_gap_event *event, void *) {
 
     case BLE_GAP_EVENT_PASSKEY_ACTION:
         // A new pairing. A bonded phone does not come here: it has its key.
+        // The store also holds the bonds of the BLE remotes: count the phones.
+        if (phone_bonds() >= SCRL_BLE_PHONE_BONDS) {
+            ble_gap_terminate(event->passkey.conn_handle, BLE_ERR_AUTH_FAIL);
+            scrl_log("BLE  pairing refused: %d phones are bonded (hold the button 5 s to delete them)",
+                     SCRL_BLE_PHONE_BONDS);
+            return 0;
+        }
         if (event->passkey.params.action == BLE_SM_IOACT_DISP && scrl_ble_pairing_open()) {
             struct ble_sm_io io = {};
             io.action = BLE_SM_IOACT_DISP;
@@ -462,6 +514,15 @@ static int gap_event(struct ble_gap_event *event, void *) {
             s_sub_ota.store(on);
         } else if (event->subscribe.attr_handle == s_h_capture) {
             s_sub_capture.store(on);
+        } else if (event->subscribe.attr_handle == s_h_tsl6) {
+            // Only an authenticated link opens the TSL6 link (the stack checks it too).
+            bool open = on && link_authenticated(event->subscribe.conn_handle);
+            if (open && !s_sub_tsl6.exchange(true)) {
+                s_conn_tsl6 = event->subscribe.conn_handle;
+                scrl_tsl6_ble_event(SCRL_TSL6_EV_OPEN, s_conn_tsl6, nullptr, 0);
+            } else if (!open && s_sub_tsl6.exchange(false)) {
+                scrl_tsl6_ble_event(SCRL_TSL6_EV_CLOSE, s_conn_tsl6, nullptr, 0);
+            }
         }
         return 0;
     }
@@ -534,6 +595,7 @@ static void gatt_layout_check(void) {
 static void on_sync(void) {
     int rc = ble_hs_util_ensure_addr(0);
     if (rc == 0) rc = ble_hs_id_infer_auto(0, &s_own_addr_type);
+    if (rc == 0) scrl_central_set_own_addr_type(s_own_addr_type);
     if (rc != 0) {
         ESP_LOGE(TAG, "no BLE address: rc=%d", rc);
         return;
@@ -543,9 +605,14 @@ static void on_sync(void) {
     snprintf(s_name, sizeof(s_name), "SCRL-%02X%02X", addr[1], addr[0]);
     ble_svc_gap_device_name_set(s_name);
 
-    // 0 dBm keeps the TX current peak low. The phone is about 1 m away.
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, ESP_PWR_LVL_N0);
-    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, ESP_PWR_LVL_N0);
+    // 0 dBm keeps the TX current peak low. The phone is about 1 m away. The TSL6
+    // setting "BLE signal strength" (BLEPWR, A3 byte 31 bits 1:0 = engine settings
+    // byte 7) lowers it: 0 strong (0 dBm), 1 medium (-6 dBm), 2 weak (-12 dBm). It
+    // counts from the next start, as on a TSL6.
+    uint8_t blepwr = scrl_proc_get_settings().tsl6[7] & 3u;
+    esp_power_level_t level = blepwr == 1 ? ESP_PWR_LVL_N6 : blepwr == 2 ? ESP_PWR_LVL_N12 : ESP_PWR_LVL_N0;
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_DEFAULT, level);
+    esp_ble_tx_power_set(ESP_BLE_PWR_TYPE_ADV, level);
 
     // A board with no bond is of no use to its owner: let the first phone pair
     // after any kind of start.

@@ -17,6 +17,11 @@
  *   0009  OTA data     write without response, write (0.4.2: Bluefy on iOS
  *                      delivers no write without response here)
  *   000A  Capture      notify                packets of a capture, see scrl_capture.h (0.4.0)
+ *   000B  TSL6         write, write without response, notify
+ *                                            the TSL6 app protocol (frames 55 7F TYPE LEN PAYLOAD CHK)
+ *                                            to the TSL6 car features engine (0.6.0), see scrl_tsl6.h.
+ *                                            A subscribe opens the TSL6 link, as a good A8 password
+ *                                            does on a TSL6.
  * Info is open. Every other characteristic needs an encrypted and
  * authenticated link.
  *
@@ -35,11 +40,14 @@
  *   - A phone that does not reach an authenticated link in 30 s is disconnected.
  *
  * RADIO
- *   Connectable advertising every 1 s at 0 dBm, name SCRL-xxxx. One connection:
- *   advertising stops while a phone is connected.
+ *   Connectable advertising every 1 s at 0 dBm (the TSL6 setting BLEPWR lowers
+ *   it), name SCRL-xxxx. One phone: advertising stops while a phone is
+ *   connected. Up to 3 more links as central: the BLE remotes of the TSL6
+ *   engine (scrl_central.h).
  */
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define SCRL_CMD_RESET_COUNTERS 0x01u
@@ -74,3 +82,10 @@ bool scrl_ble_connected(void);
 
 /** Delete every bond and drop the link. */
 void scrl_ble_forget_bonds(void);
+
+/**
+ * Send one TSL6 frame to the phone (TSL6 characteristic), cut into
+ * notifications of the MTU size. The whole frame or nothing: false when the
+ * link, the subscription or the stack buffers are not there. Any task.
+ */
+bool scrl_ble_tsl6_send(uint16_t conn, const uint8_t *frame, size_t len);

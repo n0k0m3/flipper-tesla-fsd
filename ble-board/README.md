@@ -8,7 +8,7 @@ Firmware for a small board that runs Scroll Ack with BLE control and no Wi-Fi.
 | Bus | One bus only: Vehicle CAN, 500 kbit/s. On a T-2CAN the other channel stays off the bus |
 | Control | BLE only. No Wi-Fi |
 | Framework | ESP-IDF v5.5 (built with v5.5.6) |
-| Status | **All builds compile. 0.5.0 adds the TSL6 car features engine: not car-tested. The NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1, 0.3.2) passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: only BLE pairing ran (a T-2CAN on the bench).** |
+| Status | **All builds compile. 0.5.0 adds the TSL6 car features engine, 0.6.0 the TSL6 app protocol and BLE remotes: not car-tested. The NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1, 0.3.2) passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: only BLE pairing ran (a T-2CAN on the bench).** |
 
 The Scroll Ack code sends one frame ID only: `0x3C2`, the tick. Since firmware 0.5.0 the board also runs the TSL6 car features ([TSL6 car features engine](#tsl6-car-features-engine)). They send only the frames of the features that the owner turns on in the app, and never `0x370`. With the factory settings every car feature is off.
 The Scroll Ack logic is not copied. This app includes `esp32/.firmware/scroll_ack.h` and compiles `esp32/.firmware/fsd_handler.cpp` from their own place.
@@ -125,28 +125,40 @@ The board uses the shared `scroll_ack.h` of the T-2CAN as it is. `main/scrl_scro
 
 ## TSL6 car features engine
 
-Since firmware 0.5.0 the board runs the car code of the TSL6 module (runtime V1.0.00): the C rewrite in the repo `tsl6-firmware`, imported into `components/tsl6/` by `tools/tsl6-import.py`. The modules m2 to m8 and the needed part of m1 are copied as they are. `components/tsl6/IMPORT.md` lists the source commit and every patch. The port adds:
+Since firmware 0.5.0 the board runs the code of the TSL6 module (runtime V1.0.00): the C rewrite in the repo `tsl6-firmware`, imported into `components/tsl6/` by `tools/tsl6-import.py`. Since 0.6.0 that includes the TSL6 BLE side: the app protocol, the BLE remote buttons and the light records. `components/tsl6/IMPORT.md` lists the source commit and every patch.
+
+Imported as they are: the car modules m2 to m5 and m8, the command dispatcher and the link table (m7), the replies (status, gauge, tables) and the central role setup (m6), and the needed part of m1. Not imported: the vendor key, the A8 password, the UID activation (AD, AE, AF), the boot flag, the TSL6 OTA. The port adds:
 
 | Part | Job |
 |---|---|
-| `port/tsl6_tmos.c` | The part of the WCH BLE OS (TMOS) that the car code uses: event tasks, timers (0.625 ms ticks), helpers |
-| `port/tsl6_tables.c` | The settings blocks and tables of the TSL6, saved through the board (NVS namespace `tsl6`, one blob per TSL6 flash page) |
-| `port/tsl6_engine.*` | Start-up, frame input, settings, and the send path (`can_tx`) |
-| `port/tsl6_stubs.c` | The TSL6 parts that the board does not have: its own BLE link, buzzer, LED, RF light link, UID check |
+| `port/tsl6_tmos.c` | The part of the WCH BLE OS (TMOS) that the code uses: event tasks, timers (0.625 ms ticks), task messages, helpers |
+| `port/tsl6_can.c` | The TSL6 CAN filters as a software list (the code sees the frames that the TSL6 sees), the receive path with the CAN sniff (C0), and `can_tx` (only when bus 0 is alive, never `0x370`) |
+| `port/tsl6_ble.c` | The TSL6 BLE frame link (`55 7F TYPE LEN PAYLOAD CHK`) on the board characteristic TSL6 |
+| `port/tsl6_central.c` | The WCH central API of the remote button code, on the NimBLE central role of the board (`main/scrl_central.cpp`) |
+| `port/tsl6_tables.c` | The settings blocks and tables, saved through the board (NVS namespace `tsl6`, one blob per TSL6 flash page) |
+| `port/tsl6_engine.*` | Start-up in the stock order, settings |
+| `port/tsl6_stubs.c` | The TSL6 hardware that the board does not have: buzzer, LED, RF radio, boot flag; the chip ID (UID14 = `SCRL-H2`, 0, the BLE MAC reversed) |
 | `gen/` | The TSL6 RAM globals at their stock offsets in 3 regions (3.2 KB), and the table of the BLE ROM functions |
 
 Rules:
-- The engine runs in the CAN task. It reads every received frame and sends through `scrl_can_send_tsl6()`: only in Active (the same Listen-Only holds as for the ticks), any standard ID except `0x370`. `can_tx()` of the engine refuses `0x370` too, and the patched EPAS handler never sends it.
-- The TSL6 scroll tick stays off: `uid_crc_ok()` is 0 in the port. The board's Scroll Ack is the only tick source. The TSL6 activation code (UID CRC, boot flag) is not imported.
-- Settings: the Settings JSON key `tsl6`, 28 bytes as 56 hex digits: the TSL6 A3 status bytes 24-35, then 59-74, with the TSL6 bit layout. The control app writes them from the TSL6 settings rows. The factory value `0000ff010100000001010000` + 32 zeros has every car feature off.
-- A change that the TSL6 code makes itself (key gestures) goes back to the board settings, so the app sees it.
-- A TSL6 chip reset (the factory reset by the car keys) restarts the engine from its saved settings. The board does not restart.
+- The engine runs in the CAN task. It reads every received frame that the TSL6 filters pass and sends through `scrl_can_send_tsl6()`: only in Active (the same Listen-Only holds as for the ticks), any standard ID except `0x370`. `can_tx()` refuses `0x370` too, and the patched EPAS handler never sends it.
+- The TSL6 scroll tick stays off (patched `tick_start`). The board's Scroll Ack is the only tick source. The app sends A1 (AP assist) to the board, not to the engine.
+- The TSL6 app protocol: the board characteristic TSL6 (`000B`, write and notify, authenticated link only) carries the TSL6 frames both ways. A subscribe opens the engine link, as a good A8 password does on a TSL6, and the engine sends its A0 status. Every TSL6 command works as on the TSL6: settings (A3), car actions (A7), shortcuts (AB), BLE buttons (BA, BB), ambient light (B9), gauge stream (B0), CAN tool (C0, C1), vehicle and battery info (D0, D1, D2), BLE remotes (F0), factory reset (A4).
+- Settings: the engine keeps the TSL6 settings block. The Settings JSON key `tsl6` (28 bytes as hex: A3 bytes 24-35, then 59-74) mirrors it; firmware 0.5.0 took the settings only that way. The factory value has every car feature off.
+- A change that the TSL6 code makes itself (A3, key gestures) goes back to the board settings.
+- A TSL6 chip reset (A4, A5, the factory reset by the car keys) restarts the engine from its saved settings. The board and its links stay.
+- BLE remotes: the engine scans, pairs and links up to 3 remote buttons as the TSL6 does, through the NimBLE central role. A remote pairs with Just Works or a made-up passkey (legacy pairing allowed for that pairing only). The board keeps the remote addresses (NVS `central`/`rbonds`), so their bonds do not count as phone bonds: still at most 2 phones.
+- Ambient light: the whole-car records go to the car on CAN `0x679`. The zone-link records need the TSL6 2.4 GHz radio; the board keeps them and sends nothing.
+- BLE signal strength (`BLEPWR`, A3 byte 31 bits 1:0): 0 dBm, -6 dBm or -12 dBm from the next start.
 - The engine needs the frames of the bus. The TWAI boards (the NanoH2 among them) give it every frame. The MCP2515 and MCP2518FD boards load the 6 IDs of `main/scrl_rx_ids.h` as hardware filters, so most features do not act there.
-- Size: about 51 KB of flash and 4.9 KB of RAM.
+- Not on the board: buzzer (beep volume), LED, RF zone light link, TSL6 password and TSL6 firmware update (the board pairs and has its own update).
 
-Host test: `components/tsl6/test/run.sh CAPTURE.log[.gz] [HEX56]` builds the engine for the host (32-bit, with ASan and UBSan) and replays a car capture (candump text). It fails when the factory settings send a frame. Then it turns on each settings bit by itself and prints the IDs that the engine sends. Capture of 2026-11-20 (404 s, 363224 frames): the factory settings sent 0 frames; the bits sent only `0x229`, `0x249`, `0x273`, `0x334`, `0x3C2`, `0x3C3`, `0x3E9`.
+Host test: `components/tsl6/test/run.sh CAPTURE.log[.gz] [HEX56 | ble | remote]` builds the engine for the host (32-bit, ASan and UBSan) and replays a car capture (candump text). It fails when the factory settings send a frame.
+- No argument: each settings bit by itself, and the IDs that it sends. Capture of 2026-11-20 (404 s): the factory settings sent 0 frames; the bits sent only `0x229`, `0x249`, `0x273`, `0x334`, `0x3C2`, `0x3C3`, `0x3E9`.
+- `ble`: a phone link sends A0, AB, BA, C1, D0, the gauge stream and the CAN tool; it checks the replies and the A0 status.
+- `remote`: a fake central role; the phone scans (F0 01), adds a remote (F0 05); the engine connects, finds the HID report, turns its notifications on, saves the remote and links it again.
 
-Known difference: on the car of the 2026-11-20 capture, `0x334` has the stopping mode at data[3] bits 3:2 and the regen at data[0] bit 7. The TSL6 code writes data[3] bits 7:6 and data[2] bits 4:0. The control app does not show the rows `KERS` and `stoppingMode` for the board.
+Known difference: on the car of the 2026-11-20 capture, `0x334` shows the stopping mode in data[3] bits 3:2 and the regen in data[0] bit 7. The TSL6 code writes data[3] bits 7:6 and data[2] bits 4:0, as the TSL6 does. Not checked on the car.
 
 ## TX gates
 
@@ -269,7 +281,8 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/scrl_status.h` | Status JSON and Live record (host-tested) |
 | `main/scrl_log.h`, `scrl_logbuf.*` | Event log ring (host-tested) and its lock |
 | `main/scrl_store.*` | NVS: settings with the T-2CAN keys, the ported settings blob, boot record, passkey |
-| `main/scrl_tsl6.*` | The TSL6 engine on the board: HAL, settings sync, NVS namespace `tsl6` |
+| `main/scrl_tsl6.*` | The TSL6 engine on the board: HAL, settings sync, the TSL6 characteristic events, NVS namespace `tsl6` |
+| `main/scrl_central.*` | The NimBLE central role for the BLE remotes of the engine |
 | `components/tsl6/` | The TSL6 car features engine (see above). `vendor/` and `gen/` come from `tools/tsl6-import.py` |
 | `main/scrl_passkey.h` | Reader for the set-passkey command (host-tested) |
 | `main/scrl_ble.*` | NimBLE service, pairing rules |
@@ -380,8 +393,7 @@ The results stay in the browser. Use Export and Import to move them between the 
 
 ## Not done yet
 
-- The TSL6 engine is not car-tested. The replay test shows what it sends, not what the car does.
-- The TSL6 actions of the Car tab (A4 to A9: lights, horn, doors, seats), the tables (shortcuts AB, BLE buttons BA, ambient light) and the TSL6 BLE remotes have no path from the app to the engine yet. The engine has the code; the board BLE service has no command for it.
+- The TSL6 engine is not car-tested. The replay tests show what it sends, not what the car does. The BLE remotes ran only against a fake central role.
 - `0x334` stopping mode and regen: see [TSL6 car features engine](#tsl6-car-features-engine).
 
 - The validation above, on every board except the NanoH2. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
