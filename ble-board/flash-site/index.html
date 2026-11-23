@@ -48,7 +48,7 @@
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); word-spacing: .05em; -webkit-font-smoothing: antialiased; }
-main { max-width: 1000px; margin: 0 auto; padding: 28px 16px 56px; }
+main { max-width: 1000px; margin: 0 auto; padding: 22px 16px 56px; }
 h1, h2, h3 { font-family: var(--font-head); font-weight: 700; letter-spacing: 0; }
 a { color: var(--accent-text); }
 code { font-family: var(--mono); font-size: 13px; background: var(--card-2); border: 1px solid var(--line-2); padding: 1px 5px; border-radius: 4px; }
@@ -66,14 +66,14 @@ code { font-family: var(--mono); font-size: 13px; background: var(--card-2); bor
 .applink:hover { background: var(--card-2); }
 
 /* notices: one line, details folded */
-.notice { margin: 18px 0 0; border-radius: 8px; padding: 10px 14px; font-size: 15px; }
+.notice { margin: 14px 0 0; border-radius: 8px; padding: 10px 14px; font-size: 15px; }
 .notice.warn { background: var(--warn-soft); color: var(--warn); }
 .notice.bad { background: var(--bad-soft); color: var(--bad); }
 details.notice summary { cursor: pointer; font-weight: 600; }
 details.notice p { margin: 8px 0 2px; }
 
 /* path switch: USB for a first install, Bluetooth for an update */
-.paths { display: inline-flex; margin-top: 22px; padding: 3px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
+.paths { display: inline-flex; margin-top: 16px; padding: 3px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
 .paths button { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px/1 var(--font); padding: 0 16px; min-height: 40px; border-radius: 7px; cursor: pointer; }
 .paths button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-text); }
 .paths button:disabled { cursor: not-allowed; opacity: .55; }
@@ -84,7 +84,7 @@ details.notice p { margin: 8px 0 2px; }
 @media (max-width: 760px) { .grid { grid-template-columns: minmax(0, 1fr); } }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
 .step { padding: 18px 20px 20px; }
-.step + .step { border-top: 1px solid var(--line-2); }
+.step + .step, #usb > .step:first-child, #ble > .step:first-child { border-top: 1px solid var(--line-2); }
 .step h2, .list > h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 20px; line-height: 1.2; }
 h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; flex: none;
   border: 1.5px solid var(--ink); font: 700 15px/1 var(--font-head); }
@@ -100,7 +100,7 @@ h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; bo
 .board[aria-pressed="true"] { border-left-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .board:disabled { cursor: not-allowed; opacity: .6; }
 .board .id { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
-#detail h3 { margin: 0; font-size: 22px; line-height: 1.2; }
+#detail h3 { margin: 0; font: 600 18px/1.3 var(--font); } /* the picked board: part of step 1, smaller than a step title */
 #detail .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
 dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 4px 16px; margin: 12px 0 0; font-size: 15px; }
 dt { color: var(--muted); }
@@ -121,10 +121,10 @@ ul.notes li + li { margin-top: 4px; }
 .btn.ghost { background: var(--card); color: var(--ink); border-color: var(--btn-b); }
 .btn:hover:not(:disabled) { filter: brightness(1.06); }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
-.check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; margin-top: 8px; max-width: 70ch; }
+.check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; margin-top: 12px; max-width: 70ch; }
 .check input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 .check b { font-weight: 600; }
-ol.steps { margin: 12px 0 0; padding-left: 22px; font-size: 15px; max-width: 70ch; list-style-type: lower-alpha; } /* a, b, c: the circled numbers are the steps */
+ol.steps { margin: 10px 0 0; padding-left: 22px; font-size: 15px; list-style-type: lower-alpha; max-width: 76ch; } /* a, b, c: the circled numbers are the steps */
 ol.steps li + li { margin-top: 4px; }
 .actions + .hint { margin: 0 0 4px; font-size: 14px; }
 .status { margin-top: 12px; font-size: 15px; min-height: 1.5em; }
@@ -183,8 +183,8 @@ footer p { margin: 0 0 6px; }
   .list.picked .change { display: inline-block; }
 }
 @media (max-width: 560px) { #usb .step > .actions .btn, #ble .step > .actions .btn { flex: 1 1 100%; } }
-@media (max-width: 560px) { .applink { border: 0; background: none; padding: 0; min-height: 36px; color: var(--accent-text); text-decoration: underline; } }
-@media (max-width: 560px) { .top { flex-direction: column; } .top h1 { font-size: 26px; } .step { padding: 16px; } .list > h2 { padding: 16px 16px 6px; } .group { padding: 12px 16px 4px; } .board { padding-left: 13px; } }
+@media (max-width: 560px) { .applink { min-height: 40px; padding: 0 12px; font-size: 15px; } }
+@media (max-width: 560px) { .top h1 { font-size: 26px; } .step { padding: 16px; } .list > h2 { padding: 16px 16px 6px; } .group { padding: 12px 16px 4px; } .board { padding-left: 13px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
 </head>
@@ -223,14 +223,14 @@ footer p { margin: 0 0 6px; }
         <div class="step">
           <h2><span class="n">2</span>Flash the board</h2>
           <div id="steps"></div>
+          <label class="check"><input type="checkbox" id="erase" checked>
+            <span><b>Erase the whole flash first.</b> Keep this on for a first install: the board then makes a new random passkey. Turn it off to keep the passkey, the settings and the bonds.</span></label>
           <div class="actions">
             <button class="btn" type="button" id="flash">Flash and read passkey</button>
             <button class="btn ghost" type="button" id="readonly">Read passkey only</button>
             <button class="btn ghost" type="button" id="stop" hidden>Stop</button>
           </div>
           <p class="hint">A board that has the firmware already: click "Read passkey only". The page resets the board and reads the passkey.</p>
-          <label class="check"><input type="checkbox" id="erase" checked>
-            <span><b>Erase the whole flash first.</b> Keep this on for a first install: the board then makes a new random passkey. Turn it off to keep the passkey, the settings and the bonds.</span></label>
           <div class="status" id="status" role="status" aria-live="polite"></div>
           <progress id="progress" max="1" value="0" hidden></progress>
           <details class="console" id="consolebox">
@@ -248,7 +248,7 @@ footer p { margin: 0 0 6px; }
             <p>Write these 6 digits on a label on the board. Then pair from the app within 5 minutes after power-on: Connect, and pick <b>SCRL-xxxx</b>.</p>
             <div class="actions">
               <a class="btn" href="https://tsl6-app.surge.sh/">Open the app</a>
-              <button class="btn ghost" type="button" id="copy">Copy</button>
+              <button class="btn ghost" type="button" id="copy">Copy passkey</button>
             </div>
           </div>
         </div>
