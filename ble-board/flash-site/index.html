@@ -75,7 +75,7 @@ details.notice p { margin: 8px 0 2px; }
 /* path switch: USB for a first install, Bluetooth for an update */
 .paths { display: inline-flex; margin-top: 16px; padding: 3px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
 .paths button { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px/1 var(--font); padding: 0 16px; min-height: 40px; border-radius: 7px; cursor: pointer; }
-.paths button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-text); }
+.paths button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }
 .paths button:disabled { cursor: not-allowed; opacity: .55; }
 .pathnote { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
 
@@ -218,9 +218,9 @@ footer p { margin: 0 0 6px; }
   <div class="notice bad" id="noserial" hidden>This browser has no Web Serial, so it cannot flash over USB. Use Chrome or Edge on a computer for USB. The Bluetooth update works in this browser.</div>
   <div class="notice bad" id="nobrowser" hidden>This browser has no Web Serial and no Web Bluetooth. Use Chrome or Edge on a computer, Chrome on Android, or Bluefy on an iPhone.</div>
 
-  <div class="paths" role="tablist" aria-label="What to do">
-    <button type="button" role="tab" id="path-usb" aria-controls="usb" aria-selected="true">First install over USB</button>
-    <button type="button" role="tab" id="path-ble" aria-controls="ble" aria-selected="false">Update over Bluetooth</button>
+  <div class="paths" role="group" aria-label="What to do">
+    <button type="button" id="path-usb" aria-controls="usb" aria-pressed="true">Flash over USB</button>
+    <button type="button" id="path-ble" aria-controls="ble" aria-pressed="false">Update over Bluetooth</button>
   </div>
 
   <div class="grid">
@@ -230,7 +230,7 @@ footer p { margin: 0 0 6px; }
       <button class="btn ghost change" type="button" id="changeboard">Change board</button>
     </nav>
     <section class="card">
-      <div id="usb" role="tabpanel" aria-labelledby="path-usb">
+      <div id="usb">
         <div class="step">
           <h2><span class="n">2</span>Flash the board</h2>
           <div class="facts" id="detail"></div>
@@ -266,7 +266,7 @@ footer p { margin: 0 0 6px; }
           </div>
         </div>
       </div>
-      <div id="ble" role="tabpanel" aria-labelledby="path-ble" hidden>
+      <div id="ble" hidden>
         <div class="step">
           <h2><span class="n">2</span>Connect and send the update</h2>
           <div class="facts" id="detail-ble"></div>
@@ -348,10 +348,13 @@ if (!supported) $(bleSupported ? "noserial" : "nobrowser").hidden = false;
 // Two paths: USB for a first install, Bluetooth for an update. A browser with Bluetooth and no USB (a phone)
 // starts on the Bluetooth path. A path that the browser cannot do is disabled; the notice above says why.
 function setPath(p) {
-  for (const k of ["usb", "ble"]) { $(`path-${k}`).setAttribute("aria-selected", String(k === p)); $(k).hidden = k !== p; }
+  for (const k of ["usb", "ble"]) { $(`path-${k}`).setAttribute("aria-pressed", String(k === p)); $(k).hidden = k !== p; }
 }
-$("path-usb").disabled = !supported;
-$("path-ble").disabled = !bleSupported;
+// No path switch during a USB session or a Bluetooth update: the other panel holds its Stop and its status.
+function lockPaths() {
+  $("path-usb").disabled = !supported || !!(ble && ble.updating);
+  $("path-ble").disabled = !bleSupported || usbBusy;
+}
 $("path-usb").addEventListener("click", () => setPath("usb"));
 $("path-ble").addEventListener("click", () => setPath("ble"));
 setPath(!supported && bleSupported ? "ble" : "usb");
@@ -366,6 +369,7 @@ function setBusy(busy) {
   $("erase").disabled = busy;
   for (const b of document.querySelectorAll(".board")) b.disabled = busy || !!(ble && ble.updating);
   usbBusy = busy;
+  lockPaths();
   bleRender();
 }
 const consoleLines = [];
@@ -378,6 +382,7 @@ function consoleWrite(line) {
   if (atEnd) pre.scrollTop = pre.scrollHeight;
 }
 function showPasskey(digits, board) {
+  if (!$("passkey").hidden && $("digits").textContent === digits) return; // the console repeats the line every 3 s
   $("passkey").hidden = false;
   $("pkwait").hidden = true;
   $("passkey").scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
@@ -521,6 +526,7 @@ function bleRender() {
   const st = $("blestatus");
   st.textContent = BU.text; st.className = "status " + BU.tone;
   lockList();
+  lockPaths();
 
   // The board state.
   const dl = $("bleboard");
@@ -531,7 +537,7 @@ function bleRender() {
     const rows = [
       ["Board", `${SC.boardName(ble.info)} (${boardIdOf(ble)})`],
       ["Firmware", `${i.fw || "?"}${pending ? `, not confirmed: it goes back to the old image in ${mmss(ble.pendingLeft())}` : ""}`],
-      ["Op mode", op],
+      ["Mode", op],
       ["CAN frames", `${S.rx.all} received${S.rxPin >= 0 ? `, RX on GPIO${S.rxPin}` : ""}`],
       ["CAN pins", ble.has(F.PINS_CHECKED) ? "named in this build: it can go to Active" : "not named in this build: Listen-Only pin probe"],
       ["Up", SC.uptimeText(S.uptime)],
@@ -767,7 +773,10 @@ $("changeboard").addEventListener("click", () => { $("list").closest(".list").cl
 $("readonly").addEventListener("click", readOnly);
 $("stop").addEventListener("click", async () => { await stopSession(); setStatus("Stopped. The port is closed."); });
 $("copy").addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("digits").textContent); setStatus("Passkey copied.", "ok"); } catch (e) { setStatus("Copy failed. Write the digits down.", "bad"); }
+  // The result shows on the button: the status line of step 2 is above the passkey card, out of view.
+  const b = $("copy");
+  try { await navigator.clipboard.writeText($("digits").textContent); b.textContent = "Passkey copied"; } catch (e) { b.textContent = "Copy failed: write the digits down"; }
+  setTimeout(() => { b.textContent = "Copy passkey"; }, 2500);
 });
 setBusy(false);
 
@@ -779,7 +788,7 @@ function select(id, fromUser = false) {
   $("passkey").hidden = true;
   $("pkwait").hidden = false;
   $("flash").classList.remove("ghost");
-  $("list").closest(".list").classList.add("picked");
+  if (fromUser || location.hash.slice(1) === b.id) $("list").closest(".list").classList.add("picked");
   for (const btn of document.querySelectorAll(".board")) btn.setAttribute("aria-pressed", String(btn.dataset.id === b.id));
   if (location.hash !== "#" + b.id) history.replaceState(null, "", "#" + b.id);
   // The facts of the picked board, at the top of step 2 of each path. The list shows the name already.
@@ -805,7 +814,7 @@ function select(id, fromUser = false) {
       el("li", { text: "Connect the board to this computer with a USB data cable. Do not connect it to the car." }),
       el("li", { text: `Click "Flash ${b.chip} and read passkey" and pick the serial port of the board. If no port shows, or the connect fails, hold BOOT while you plug in the cable.` }),
       el("li", { text: "Wait. The page writes the image, resets the board and reads its USB console." })));
-  if (fromUser && matchMedia("(max-width: 760px)").matches) ($("usb").hidden ? $("detail-ble") : $("detail")).scrollIntoView({ behavior: "smooth", block: "start" });
+  if (fromUser && matchMedia("(max-width: 760px)").matches) ($("usb").hidden ? $("detail-ble") : $("detail")).closest(".step").scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
   bleRender();
 }
 
