@@ -72,12 +72,11 @@ code { font-family: var(--mono); font-size: 13px; background: var(--card-2); bor
 details.notice summary { cursor: pointer; font-weight: 600; }
 details.notice p { margin: 8px 0 2px; }
 
-/* path switch: USB for a first install, Bluetooth for an update */
+/* path switch: USB for a first install or a re-flash, Bluetooth for an update */
 .paths { display: inline-flex; margin-top: 16px; padding: 3px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
 .paths button { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px/1 var(--font); padding: 0 16px; min-height: 40px; border-radius: 7px; cursor: pointer; }
 .paths button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent-text); }
 .paths button:disabled { cursor: not-allowed; opacity: .55; }
-.pathnote { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
 
 /* the procedure: numbered, because the order matters */
 .grid { display: grid; grid-template-columns: minmax(0, 320px) minmax(0, 1fr); gap: 16px; margin-top: 16px; align-items: start; }
@@ -104,7 +103,6 @@ h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; bo
 .board .id { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
 .facts { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--card-2); }
 .facts dl { margin: 0; }
-#detail .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
 dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 4px 16px; margin: 12px 0 0; font-size: 15px; }
 dt { color: var(--muted); }
 dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
@@ -345,7 +343,7 @@ let usbBusy = false;
 const supported = "serial" in navigator;
 const bleSupported = bluetoothSupported();
 if (!supported) $(bleSupported ? "noserial" : "nobrowser").hidden = false;
-// Two paths: USB for a first install, Bluetooth for an update. A browser with Bluetooth and no USB (a phone)
+// Two paths: USB for a first install or a re-flash, Bluetooth for an update. A browser with Bluetooth and no USB (a phone)
 // starts on the Bluetooth path. A path that the browser cannot do is disabled; the notice above says why.
 function setPath(p) {
   for (const k of ["usb", "ble"]) { $(`path-${k}`).setAttribute("aria-pressed", String(k === p)); $(k).hidden = k !== p; }
