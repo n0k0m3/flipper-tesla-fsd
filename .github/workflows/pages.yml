@@ -5,6 +5,12 @@ name: pages
 # of a newer test build under /firmware/beta/. The browser flasher downloads
 # from there: GitHub release asset URLs send no CORS headers, so a browser can't
 # fetch them, while GitHub Pages answers with Access-Control-Allow-Origin: *.
+#
+# It also publishes the BLE board firmware (ble-board/, tags ble-board-v*):
+# /ble-board/ holds the newest stable release and /ble-board/beta/ a newer test
+# release. Each holds the USB flash site, builds.json (with "tag") and the
+# images in firmware/. The TSL6 app reads builds.json there for its Bluetooth
+# update. ble-board/tools/release.sh runs this workflow after a release.
 
 on:
   workflow_run:
@@ -62,7 +68,8 @@ jobs:
           NEWEST=$(jq -r '.[0].tag_name // empty' releases.json)
           STABLE=$(jq -r '[.[] | select(.prerelease | not) | select(.tag_name | test("-(alpha|beta|rc)") | not)][0].tag_name // empty' releases.json)
           rm releases.json
-          test -n "$NEWEST"
+          # A fork can have no release with merged images. Then there is no /firmware/.
+          if [ -z "$NEWEST" ]; then echo "No release with merged images."; exit 0; fi
           # Before the first stable release with images, the newest build is all there is.
           if [ -z "$STABLE" ]; then STABLE="$NEWEST"; fi
           publish() {
@@ -74,6 +81,33 @@ jobs:
           }
           publish "$STABLE" _site/firmware
           if [ "$NEWEST" != "$STABLE" ]; then publish "$NEWEST" _site/firmware/beta; fi
+      - name: Add the BLE board releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sudo chown -R "$(id -u):$(id -g)" _site
+          # /ble-board/      newest stable ble-board-v* release (not pre-release, no "-" in the version)
+          # /ble-board/beta/ newest ble-board-v* release of any kind, only while it is newer than that
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --jq \
+            '[.[] | select(.draft | not) | select(.tag_name | startswith("ble-board-v"))] | sort_by(.created_at) | reverse' > ble-releases.json
+          NEWEST=$(jq -r '.[0].tag_name // empty' ble-releases.json)
+          STABLE=$(jq -r '[.[] | select(.prerelease | not) | select(.tag_name | test("^ble-board-v[0-9]+[.][0-9]+[.][0-9]+$"))][0].tag_name // empty' ble-releases.json)
+          rm ble-releases.json
+          if [ -z "$NEWEST" ]; then echo "No BLE board release."; exit 0; fi
+          ble_publish() {
+            mkdir -p "$2/firmware"
+            gh release download "$1" --repo "$GITHUB_REPOSITORY" --dir "$2" \
+              --pattern builds.json --pattern index.html --pattern scrl.js --pattern ble-update.js
+            gh release download "$1" --repo "$GITHUB_REPOSITORY" --dir "$2/firmware" --pattern 'scrl-*.bin'
+            # Every image of builds.json must be there, with its SHA-256.
+            jq -r '.builds[] | "\(.app_sha256)  \(.app)\n\(.sha256)  scrl-\(.id)-full.bin"' "$2/builds.json" > sums.txt
+            (cd "$2/firmware" && sha256sum -c --quiet "$GITHUB_WORKSPACE/sums.txt")
+            rm sums.txt
+            jq --arg tag "$1" '. + {tag: $tag}' "$2/builds.json" > tmp.json && mv tmp.json "$2/builds.json"
+            jq -c '{tag, version, commit}' "$2/builds.json"
+          }
+          if [ -n "$STABLE" ]; then ble_publish "$STABLE" _site/ble-board; fi
+          if [ "$NEWEST" != "$STABLE" ]; then ble_publish "$NEWEST" _site/ble-board/beta; fi
       - uses: actions/upload-pages-artifact@v3
         with:
           path: ./_site

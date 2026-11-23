@@ -64,14 +64,28 @@ The same page also updates a board over Bluetooth (Web Bluetooth). It worked fro
 
 1. Run `tools/build-boards.sh`.
 2. Run `tools/make-flash-site.py`. It writes `build/flash-site/` with every full image and app image, their SHA-256 and the board ID. It stops when a build has no image or no text in `flash-site/boards.json`, or when the UUIDs, the commands or the OTA values in `flash-site/scrl.js` differ from `main/scrl_ble.h` and `main/scrl_ota.h`.
-3. Deploy `build/flash-site/` to the preview site first: `surge build/flash-site scrl-flash-preview.surge.sh`. The preview app gets its board images from there.
-4. After the test, deploy the same folder to the live site: `surge build/flash-site scrl-flash.surge.sh`. The live app gets its board images from there.
+3. Deploy `build/flash-site/` to the preview site first: `surge build/flash-site scrl-flash-preview.surge.sh`. Test the images from it.
+4. After the test, publish the same folder as a GitHub release: `tools/release.sh` (or `tools/release.sh --beta` for a test release). See [Releases](#releases).
 
-Live site: https://scrl-flash.surge.sh. Preview site: https://scrl-flash-preview.surge.sh. Older copies of the app read the preview site, so keep it up.
+Old sites: https://scrl-flash.surge.sh (0.6.1) and https://scrl-flash-preview.surge.sh. App copies from before the releases read them, so keep them up.
 
-The site is public to anyone who has the address. It publishes the compiled images, not the source.
-The site has a `CORS` file, so the control app (another origin) reads `builds.json` and the app images: its Board firmware page gets the image of the connected board from here. `builds.json` gives each build its board ID and its CAN controller (`can_id`).
+The site has a `CORS` file for the old app copies. `builds.json` gives each build its board ID and its CAN controller (`can_id`).
 "Erase the whole flash first" is on by default: for a first install the board then makes a new passkey. The page checks the SHA-256 of the download and the chip before it writes.
+
+## Releases
+
+The source is public: Forgejo (main repo) and the GitHub fork `n0k0m3/flipper-tesla-fsd`. Each push to the `forgejo` remote goes to both: the remote has two push URLs on the owner's clone. Make tags here, never on GitHub only.
+
+`tools/release.sh [--beta] [SITE_DIR]` publishes the flash site of step 2 as a GitHub release:
+
+1. It checks the SHA-256 of every image against `builds.json`.
+2. It makes the signed tag `ble-board-v<version>` on the commit of `builds.json`, and pushes it to Forgejo and GitHub. A stable release must be on `forgejo/main`.
+3. It makes the GitHub release with all images, `builds.json` and the flash site as assets. A version with `-` (`0.7.0-rc.1`) or `--beta` makes a pre-release.
+4. It runs the `pages` workflow. The workflow copies the newest stable release to https://n0k0m3.github.io/flipper-tesla-fsd/ble-board/ and a newer test release to `.../ble-board/beta/`. Each is the USB flash site with its images and `builds.json` (plus `"tag"`).
+
+A browser cannot download a release asset: GitHub sends no CORS header for it. GitHub Pages sends `Access-Control-Allow-Origin: *`. So the control app reads `builds.json` and the images from Pages, and it checks the SHA-256 of the image against the release asset (`digest` in the GitHub API). The live app offers only the stable release. The preview app also offers the test release.
+
+After a change of a release on the GitHub page, run the workflow again: `gh workflow run pages.yml -R n0k0m3/flipper-tesla-fsd --ref main`.
 
 ## NanoH2: before the first power-up with the Grove cable
 
@@ -304,6 +318,7 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/Kconfig.projbuild`, `boards/` | Board choice and the options of each build |
 | `tools/build-boards.sh` | Builds every board |
 | `flash-site/`, `tools/make-flash-site.py` | Flash site (USB flash, Bluetooth update): page, board texts, generator |
+| `tools/release.sh`, `../.github/workflows/pages.yml` | GitHub release of a flash site, and its copy on GitHub Pages |
 
 ## Tests
 
