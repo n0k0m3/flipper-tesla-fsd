@@ -8,7 +8,7 @@ Firmware for a small board that runs Scroll Ack with BLE control and no Wi-Fi.
 | Bus | One bus only: Vehicle CAN, 500 kbit/s. On a T-2CAN the other channel stays off the bus |
 | Control | BLE only. No Wi-Fi |
 | Framework | ESP-IDF v5.5 (built with v5.5.6) |
-| Status | **All builds compile. 0.5.0 adds the TSL6 car features engine, 0.6.0 the TSL6 app protocol and BLE remotes: not car-tested. The NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1, 0.3.2) passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: only BLE pairing ran (a T-2CAN on the bench).** |
+| Status | **All builds compile. 0.6.1 on the NanoH2 (`nanoh2-minican`, TX GPIO2, RX GPIO1) and on the T-2CAN (`lilygo-t2can`, Vehicle CAN on can0): the owner tested every feature on both boards on 2026-11-22, and all worked. That covers Scroll Ack, the TSL6 car features engine (0.5.0), the TSL6 app protocol and BLE remotes (0.6.0), and the BLE update. The NanoH2 (0.3.2) also passed every check of [Validation](#validation) on 2026-11-20, in the car. Other boards: not tested on hardware.** |
 
 The Scroll Ack code sends one frame ID only: `0x3C2`, the tick. Since firmware 0.5.0 the board also runs the TSL6 car features ([TSL6 car features engine](#tsl6-car-features-engine)). They send only the frames of the features that the owner turns on in the app, and never `0x370`. With the factory settings every car feature is off.
 The Scroll Ack logic is not copied. This app includes `esp32/.firmware/scroll_ack.h` and compiles `esp32/.firmware/fsd_handler.cpp` from their own place.
@@ -60,7 +60,7 @@ To change an option of one board, run `idf.py -B build/<build-id> -D SDKCONFIG=b
 
 `flash-site/` is a small web page that flashes the full image over USB (Web Serial, esptool-js 0.7.0), resets the board, reads its USB console and shows the BLE passkey in large digits. It also checks the board ID in the passkey line. "Read passkey only" does the same for a board that has the firmware. It needs Chrome or Edge on a computer.
 
-The same page also updates a board over Bluetooth (Web Bluetooth). It worked from Chrome on a computer (2026-11-20). Chrome on Android is not tested. In Bluefy on an iPhone the board got none of the data writes without response, and the link then blocked. Since 0.4.2 the board also takes the data as write with response (Info `"otaw":1`), and on an iPhone or iPad the page sends that way. It is slower. A board with older firmware needs one USB flash first. It sends the app image with the protocol of `main/scrl_ota.h`, connects again after the restart, and shows the frame count, the CAN pin state and the time until the rollback. "Confirm the new image" makes the image permanent. `flash-site/scrl.js` is a copy of the codec of the control app (tsl6-webble `public/lib/scrl.js`). `flash-site/ble-update.js` holds the update loop of the app.
+The same page also updates a board over Bluetooth (Web Bluetooth). It worked from Chrome on a computer (2026-11-20). Chrome on Android is not tested. In Bluefy on an iPhone the board got none of the data writes without response, and the link then blocked. Since 0.4.2 the board also takes the data as write with response (Info `"otaw":1`), and on an iPhone or iPad the page sends that way. It is slower. Since 0.6.1 the page sends a copy of each chunk, not a view into the image: with a view, Bluefy failed with "status 10" and the board got 0 bytes. The update from Bluefy on an iPhone then worked (2026-11-22). A board with older firmware needs one USB flash first. It sends the app image with the protocol of `main/scrl_ota.h`, connects again after the restart, and shows the frame count, the CAN pin state and the time until the rollback. "Confirm the new image" makes the image permanent. `flash-site/scrl.js` is a copy of the codec of the control app (tsl6-webble `public/lib/scrl.js`). `flash-site/ble-update.js` holds the update loop of the app.
 
 1. Run `tools/build-boards.sh`.
 2. Run `tools/make-flash-site.py`. It writes `build/flash-site/` with every full image and app image, their SHA-256 and the board ID. It stops when a build has no image or no text in `flash-site/boards.json`, or when the UUIDs, the commands or the OTA values in `flash-site/scrl.js` differ from `main/scrl_ble.h` and `main/scrl_ota.h`.
@@ -107,7 +107,7 @@ In the car, use a charge-only cable.
 - Scroll Ack off.
 - Listen-Only.
 - Prompt mode, pattern `-1` then `+1`, delay 600 ms, gap 100 ms, interval 2500 ms.
-  Prompt mode acts on hands-on 3, 4 and 5. It sends one pair for each prompt level, and one more pair when the nag escalates (3 → 4 → 5), as the TSL6 prompt build v2. The owner tested levels 4 and 5 on the car with the TSL6 (2026-11-18). This firmware is not car-tested yet.
+  Prompt mode acts on hands-on 3, 4 and 5. It sends one pair for each prompt level, and one more pair when the nag escalates (3 → 4 → 5), as the TSL6 prompt build v2. The owner tested levels 4 and 5 on the car with the TSL6 (2026-11-18), and with this firmware on the NanoH2 and the T-2CAN (0.6.1, 2026-11-22).
 - Left wheel (`lr` 0), random Timer interval (`rand` 1).
 
 ## Ported TSL6 settings
@@ -402,10 +402,9 @@ The results stay in the browser. Use Export and Import to move them between the 
 
 ## Not done yet
 
-- The TSL6 engine is not car-tested. The replay tests show what it sends, not what the car does. The BLE remotes ran only against a fake central role.
 - `0x334` stopping mode and regen: see [TSL6 car features engine](#tsl6-car-features-engine).
 
-- The validation above, on every board except the NanoH2. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
+- The validation above, on every board except the NanoH2. The T-2CAN passed the owner's test of every feature (2026-11-22), but has no recorded validation run. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
 - The addressable LEDs (ATOM, T-CAN485, Waveshare) and the T-Display LCD show nothing.
 - Settings for AP-First, Soft Engage and Abort Guard.
 - Sleep, if the glovebox port stays on while the car sleeps.
