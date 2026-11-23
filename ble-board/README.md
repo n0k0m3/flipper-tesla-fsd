@@ -64,8 +64,8 @@ The same page also updates a board over Bluetooth (Web Bluetooth). It worked fro
 
 1. Run `tools/build-boards.sh`.
 2. Run `tools/make-flash-site.py`. It writes `build/flash-site/` with every full image and app image, their SHA-256 and the board ID. It stops when a build has no image or no text in `flash-site/boards.json`, or when the UUIDs, the commands or the OTA values in `flash-site/scrl.js` differ from `main/scrl_ble.h` and `main/scrl_ota.h`.
-3. Deploy `build/flash-site/` to the preview site first: `surge build/flash-site scrl-flash-preview.surge.sh`. Test the images from it.
-4. After the test, publish the same folder as a GitHub release: `tools/release.sh` (or `tools/release.sh --beta` for a test release). See [Releases](#releases).
+3. Publish the folder as a test release: `tools/release.sh --beta`. The preview app (tsl6-app-preview.surge.sh) offers it. The live app does not. The USB flash site of the test release is at https://n0k0m3.github.io/flipper-tesla-fsd/ble-board/beta/.
+4. After the test, make it stable: `gh release edit ble-board-v<version> -R n0k0m3/flipper-tesla-fsd --prerelease=false --latest`, then `gh workflow run pages.yml -R n0k0m3/flipper-tesla-fsd --ref main`. Do not run `tools/release.sh` again for the same version: it stops when the tag exists. See [Releases](#releases).
 
 Old sites: https://scrl-flash.surge.sh (0.6.1) and https://scrl-flash-preview.surge.sh. App copies from before the releases read them, so keep them up.
 
