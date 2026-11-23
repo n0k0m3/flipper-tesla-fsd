@@ -158,7 +158,7 @@ Host test: `components/tsl6/test/run.sh CAPTURE.log[.gz] [HEX56 | ble | remote]`
 - `ble`: a phone link sends A0, AB, BA, C1, D0, the gauge stream and the CAN tool; it checks the replies and the A0 status.
 - `remote`: a fake central role; the phone scans (F0 01), adds a remote (F0 05); the engine connects, finds the HID report, turns its notifications on, saves the remote and links it again.
 
-Known difference: on the car of the 2026-11-20 capture, `0x334` shows the stopping mode in data[3] bits 3:2 and the regen in data[0] bit 7. The TSL6 code writes data[3] bits 7:6 and data[2] bits 4:0, as the TSL6 does. Not checked on the car.
+Known difference: on the car of the 2026-11-20 capture, `0x334` shows the stopping mode in data[3] bits 3:2 and the regen in data[0] bit 7. The TSL6 code writes data[3] bits 7:6 and data[2] bits 4:0, as the TSL6 does. The owner tested both on the car with 0.6.1 (2026-11-22): stopping mode and regen work.
 
 ## TX gates
 
@@ -401,8 +401,6 @@ The other checks have a tick and a note.
 The results stay in the browser. Use Export and Import to move them between the computer (bench) and the phone (car).
 
 ## Not done yet
-
-- `0x334` stopping mode and regen: see [TSL6 car features engine](#tsl6-car-features-engine).
 
 - The validation above, on every board except the NanoH2. The T-2CAN passed the owner's test of every feature (2026-11-22), but has no recorded validation run. The MCP2515 and MCP2518FD backends are new code, not a copy of a library.
 - The addressable LEDs (ATOM, T-CAN485, Waveshare) and the T-Display LCD show nothing.
