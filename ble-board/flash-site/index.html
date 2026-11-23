@@ -645,8 +645,8 @@ function select(id, fromUser = false) {
       el("li", { text: "Click \"Flash and read passkey\" and pick the serial port of the board. If no port shows, or the connect fails, hold BOOT while you plug in the cable." }),
       el("li", { text: "Wait. The page writes the image, resets the board and reads its USB console." }),
       el("li", { text: "The passkey shows in large digits. Write it on a label on the board." }),
-      el("li", null, "Pair from the app (Car tab > Connect, pick ", el("code", { text: "SCRL-xxxx" }), ") within 5 minutes after power-on. The board support is on the ",
-        el("a", { href: "https://tsl6-app-preview.surge.sh/", text: "preview app" }), " for now."),
+      el("li", null, "Pair from the ", el("a", { href: "https://tsl6-app.surge.sh/", text: "TSL6 app" }),
+        " (Car tab > Connect, pick ", el("code", { text: "SCRL-xxxx" }), ") within 5 minutes after power-on."),
       el("li", { text: "For a board that has the firmware already, click \"Read passkey only\". The page resets the board and reads the passkey." })));
   if (fromUser && matchMedia("(max-width: 760px)").matches) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
   bleRender();

@@ -64,7 +64,10 @@ The same page also updates a board over Bluetooth (Web Bluetooth). It worked fro
 
 1. Run `tools/build-boards.sh`.
 2. Run `tools/make-flash-site.py`. It writes `build/flash-site/` with every full image and app image, their SHA-256 and the board ID. It stops when a build has no image or no text in `flash-site/boards.json`, or when the UUIDs, the commands or the OTA values in `flash-site/scrl.js` differ from `main/scrl_ble.h` and `main/scrl_ota.h`.
-3. Deploy `build/flash-site/` (preview: `surge build/flash-site scrl-flash-preview.surge.sh`).
+3. Deploy `build/flash-site/` to the preview site first: `surge build/flash-site scrl-flash-preview.surge.sh`. The preview app gets its board images from there.
+4. After the test, deploy the same folder to the live site: `surge build/flash-site scrl-flash.surge.sh`. The live app gets its board images from there.
+
+Live site: https://scrl-flash.surge.sh. Preview site: https://scrl-flash-preview.surge.sh. Older copies of the app read the preview site, so keep it up.
 
 The site is public to anyone who has the address. It publishes the compiled images, not the source.
 The site has a `CORS` file, so the control app (another origin) reads `builds.json` and the app images: its Board firmware page gets the image of the connected board from here. `builds.json` gives each build its board ID and its CAN controller (`can_id`).
@@ -301,7 +304,6 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/Kconfig.projbuild`, `boards/` | Board choice and the options of each build |
 | `tools/build-boards.sh` | Builds every board |
 | `flash-site/`, `tools/make-flash-site.py` | Flash site (USB flash, Bluetooth update): page, board texts, generator |
-| `validate-site/`, `tools/make-validate-site.py` | Validation site: page, status rules, generator |
 
 ## Tests
 
@@ -312,16 +314,14 @@ Run `make -C test check` in the repo root. It builds and runs on the host:
 - `test_scrl_status`: the status JSON, the Live record and the event log ring.
 - `test_scrl_spi`: MCP2515 and MCP2518FD packing and bit timing, the filter list, and the board check of an update.
 
-The rule engine of the validation site has its own test. It runs on the output of `test/scrl_vectors`: run `make -C test scrl_vectors && node ble-board/validate-site/engine.test.mjs` in the repo root.
-
 `test/scrl_vectors` is a host tool, not a test. It prints what the firmware packers make and what the firmware readers accept. The control app repo uses it (see "Control app"). Build it with `make -C test scrl_vectors`.
 
 ## Validation
 
-Do these checks in order on each board, one group at a time. The [validation site](#validation-site) shows the next check, ticks the checks that the board status can prove, and keeps a tick for the other checks.
+Do these checks in order on each board, one group at a time.
 
 Rules:
-- Each ID is stable. The site keeps the result under the ID. Do not rename an ID. Add new rows with new IDs.
+- Each ID is stable. Do not rename an ID. Add new rows with new IDs.
 - The Board column is `all`, or the board IDs (Info `board`, `SCRL_BOARD_ID` in `main/Kconfig.projbuild`) that the row is for, with commas between them.
 - Go to Active only in the control app. The site only reads the board.
 - Do not connect two boards to the bus at the same time. Two Active boards send double ticks.
@@ -387,18 +387,6 @@ The board replaces the T-2CAN on the same Vehicle CAN wires. USB power from the 
 | `app-android` | all | Connect with the control app in Chrome on Android. Read Status, change one setting, read the log | Each step works |
 | `app-desktop` | all | Do the same in Chrome or Edge on a computer | Each step works |
 | `app-bluefy` | all | Do the same in Bluefy on an iPhone | Each step works |
-
-### Validation site
-
-`validate-site/` is a web page for the list above. It needs Chrome or Edge with Web Bluetooth, or Bluefy on an iPhone.
-
-1. Run `tools/make-validate-site.py`. It reads the tables of this section, `validate-site/rules.json` (the checks that the board status can prove) and the `SCRL_FLAG_*` bits in `main/scrl_status.h`. It writes `build/validate-site/`. It stops when a rule names an ID that is not in a table, or a flag that does not exist.
-2. Deploy `build/validate-site/` (preview: `surge build/validate-site scrl-validate-preview.surge.sh`).
-
-The page reads Info, Status and Settings, and the Live record once each second. It writes nothing to the board.
-A check that the status proves gets a pass with the firmware version and the time. The pass stays when the counters reset at the next power-on. A pass from older firmware shows as old.
-The other checks have a tick and a note.
-The results stay in the browser. Use Export and Import to move them between the computer (bench) and the phone (car).
 
 ## Not done yet
 

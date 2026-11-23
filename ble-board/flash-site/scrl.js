@@ -1,4 +1,4 @@
-// Copy of tsl6-webble public/lib/scrl.js (commit 5a16213): the protocol codec of the board. Do not edit here.
+// Copy of tsl6-webble public/lib/scrl.js (commit 65ae005): the protocol codec of the board. Do not edit here.
 // Change it in tsl6-webble, where test/scrl.mjs checks it against the firmware, then copy it again.
 // tools/make-flash-site.py checks the UUIDs, the commands and the OTA values below against the firmware headers.
 
@@ -262,7 +262,12 @@ function checkImage(b, target = null) {
 }
 // Flash site of the board firmware (repo flipper-tesla-fsd, ble-board/tools/make-flash-site.py). Its builds.json
 // lists each build with its board ID, CAN controller ("can_id", since 0.5.0), version, app image and SHA-256.
-const FW_SITE = "https://scrl-flash-preview.surge.sh";
+// The live app reads the live flash site. The preview app and any other host (a test server) read the preview flash
+// site, so the owner can test a new image from the preview app before it goes live.
+const FW_SITE_LIVE = "https://scrl-flash.surge.sh";
+const FW_SITE_PREVIEW = "https://scrl-flash-preview.surge.sh";
+const fwSiteFor = host => host === "tsl6-app.surge.sh" ? FW_SITE_LIVE : FW_SITE_PREVIEW;
+const FW_SITE = fwSiteFor(globalThis.location?.hostname);
 // The build of builds.json for the connected board (boardOf(info)), or null. Board ID and CAN controller must match:
 // on a T-2CAN the other controller is the other channel. A list without "can_id" (before 0.5.0) is the TWAI build.
 function pickBuild(list, target) {
@@ -287,6 +292,6 @@ export {
   UUIDS, OPTIONAL, FLAG, CMD, isPasskey, passkeyCommand, OTA, OTA_ERR, OTA_ERR_TEXT, otaErrText, LIVE_LEN, STATUS_MAX,
   PHASES, BLOCKS, BLOCK_TEXT, AP_STATES, RESET_REASONS, resetReasonName, parseLive, parseStatus, mergeFlags,
   SETTING_KEYS, LIMITS, intervalMax, limitsFor, parseSettings, settingsDiff, otaBegin, parseOtaEvent, mayWrite,
-  FW_SITE, pickBuild, creditIsWhole, CHUNK_STEPS, nextChunk, platformChunk, otaWriteWithResponse, isAppleMobile, otaWriteMode, OTA_IOS_TEXT, IMG, checkImage, sha256, appendedHashOk, hex,
+  FW_SITE, FW_SITE_LIVE, FW_SITE_PREVIEW, fwSiteFor, pickBuild, creditIsWhole, CHUNK_STEPS, nextChunk, platformChunk, otaWriteWithResponse, isAppleMobile, otaWriteMode, OTA_IOS_TEXT, IMG, checkImage, sha256, appendedHashOk, hex,
   uptimeText, BOARDS, CHIP_IDS, CAN_NAMES, boardOf, boardName, boardListenOnly,
 };
