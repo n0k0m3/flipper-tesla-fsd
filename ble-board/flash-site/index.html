@@ -47,7 +47,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); word-spacing: .05em; -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); word-spacing: .07em; -webkit-font-smoothing: antialiased; }
 main { max-width: 1000px; margin: 0 auto; padding: 22px 16px 56px; }
 h1, h2, h3 { font-family: var(--font-head); font-weight: 700; letter-spacing: 0; }
 a { color: var(--accent-text); }
@@ -102,7 +102,8 @@ h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; bo
 .board[aria-pressed="true"] { border-left-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .board:disabled { cursor: not-allowed; opacity: .6; }
 .board .id { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
-#detail h3 { margin: 0; font: 600 18px/1.3 var(--font); } /* the picked board: part of step 1, smaller than a step title */
+.facts { margin-top: 10px; padding: 10px 14px; border-radius: 8px; background: var(--card-2); }
+.facts dl { margin: 0; }
 #detail .sub { color: var(--muted); font-size: 14px; margin-top: 2px; }
 dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); align-items: baseline; gap: 4px 16px; margin: 12px 0 0; font-size: 15px; }
 dt { color: var(--muted); }
@@ -151,7 +152,10 @@ progress { width: 100%; height: 8px; margin-top: 8px; accent-color: var(--accent
 .console summary { cursor: pointer; font-weight: 600; font-size: 15px; min-height: 36px; display: flex; align-items: center; gap: 10px; list-style: none; }
 /* A drawn chevron: right when folded, down when open. */
 summary::-webkit-details-marker { display: none; }
-.console summary::before, details.images summary::before, details.notice summary::before { content: ""; width: 7px; height: 7px; flex: none;
+details.notice summary::after { content: ""; width: 7px; height: 7px; flex: none; margin-left: auto; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
+details.notice[open] summary::after { transform: rotate(45deg); }
+.warn-ico { flex: none; }
+.console summary::before, details.images summary::before { content: ""; width: 7px; height: 7px; flex: none;
   border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); margin: 0 2px; }
 details[open] > summary::before { transform: rotate(45deg); }
 details.notice summary { display: flex; align-items: center; gap: 10px; list-style: none; }
@@ -208,7 +212,7 @@ footer p { margin: 0 0 6px; }
   </header>
 
   <details class="notice warn">
-    <summary>Early firmware: work on the bench, not in the car.</summary>
+    <summary><svg class="warn-ico" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span>Early firmware: work on the bench, not in the car.</span></summary>
     <p>The NanoH2 build passed the full validation in the car. On the other boards only the USB flash and the pairing ran, on the bench. The Bluetooth update of this page worked from Chrome on a computer. From an iPhone (Bluefy) it needs firmware 0.4.2 or newer on the board, and that path is not tested on a board yet. Android is not tested. After an erase, the board starts with Scroll Ack off and in Listen-Only.</p>
   </details>
   <div class="notice bad" id="noserial" hidden>This browser has no Web Serial, so it cannot flash over USB. Use Chrome or Edge on a computer for USB. The Bluetooth update works in this browser.</div>
@@ -226,10 +230,10 @@ footer p { margin: 0 0 6px; }
       <button class="btn ghost change" type="button" id="changeboard">Change board</button>
     </nav>
     <section class="card">
-      <div class="step"><div id="detail"></div></div>
       <div id="usb" role="tabpanel" aria-labelledby="path-usb">
         <div class="step">
           <h2><span class="n">2</span>Flash the board</h2>
+          <div class="facts" id="detail"></div>
           <div id="steps"></div>
           <label class="check"><input type="checkbox" id="erase" checked>
             <span><b>Erase the whole flash first.</b> Keep this on for a first install: the board then makes a new random passkey. Turn it off to keep the passkey, the settings and the bonds.</span></label>
@@ -253,7 +257,7 @@ footer p { margin: 0 0 6px; }
             <div class="label">Passkey read. You can unplug the board.</div>
             <div class="digits" id="digits">------</div>
             <p id="pkboard"></p>
-            <p>Write these 6 digits on a label on the board. Then pair from the app within 5 minutes after power-on: Connect, and pick <b>SCRL-xxxx</b>.</p>
+            <p>Write these 6 digits on a label on the board. Then pair from the app <b>within 5 minutes</b> after power-on: Connect, and pick <b>SCRL-xxxx</b>.</p>
             <div class="actions">
               <a class="btn" href="https://tsl6-app.surge.sh/">Open the app</a>
               <button class="btn ghost" type="button" id="copy">Copy passkey</button>
@@ -264,6 +268,7 @@ footer p { margin: 0 0 6px; }
       <div id="ble" role="tabpanel" aria-labelledby="path-ble" hidden>
         <div class="step">
           <h2><span class="n">2</span>Connect and send the update</h2>
+          <div class="facts" id="detail-ble"></div>
           <p class="hint">For a board that runs this firmware already. The board keeps its passkey, its bonds and its settings. Park the car and turn Autopilot off. Close the app first: the board takes one link at a time.</p>
           <p class="hint">Chrome or Edge on a computer works. On an iPhone (Bluefy), the board needs firmware 0.4.2 or newer, and the update is slower. Chrome on Android is not tested.</p>
           <div class="actions">
@@ -776,10 +781,9 @@ function select(id, fromUser = false) {
   $("list").closest(".list").classList.add("picked");
   for (const btn of document.querySelectorAll(".board")) btn.setAttribute("aria-pressed", String(btn.dataset.id === b.id));
   if (location.hash !== "#" + b.id) history.replaceState(null, "", "#" + b.id);
-  $("detail").replaceChildren(
-    el("h3", { text: b.name }),
-    el("div", { class: "sub", text: `${b.chip}, build ${b.id}` }),
-    el("dl", null, el("dt", { text: "CAN" }), el("dd", { text: b.can })),
+  // The facts of the picked board, at the top of step 2 of each path. The list shows the name already.
+  const facts = () => [
+    el("dl", null, el("dt", { text: "Chip" }), el("dd", { text: `${b.chip}, build ${b.id}` }), el("dt", { text: "CAN" }), el("dd", { text: b.can })),
     // The image facts are for a check, not for the work: folded. The wiring notes above stay open.
     el("details", { class: "imgfacts" }, el("summary", { text: `Image details: firmware ${data.version}` }),
       el("dl", null,
@@ -788,7 +792,9 @@ function select(id, fromUser = false) {
         el("dt", { text: "SHA-256" }), el("dd", { class: "mono", text: b.sha256 })),
       el("div", { class: "dl" }, "Files: ",
         el("a", { href: `firmware/scrl-${b.id}-full.bin`, download: true, text: "full image (USB)" }), ", ",
-        el("a", { href: `firmware/${b.app}`, download: true, text: "app image (BLE update)" }))));
+        el("a", { href: `firmware/${b.app}`, download: true, text: "app image (BLE update)" })))];
+  $("detail").replaceChildren(...facts());
+  $("detail-ble").replaceChildren(...facts());
   // The board notes are about the wiring in the car: they come after the flash, before the install.
   $("notes").hidden = !b.notes.length;
   $("noteslist").replaceChildren(...b.notes.map(t => el("li", { text: t })));
@@ -798,7 +804,7 @@ function select(id, fromUser = false) {
       el("li", { text: "Connect the board to this computer with a USB data cable. Do not connect it to the car." }),
       el("li", { text: `Click "Flash ${b.chip} and read passkey" and pick the serial port of the board. If no port shows, or the connect fails, hold BOOT while you plug in the cable.` }),
       el("li", { text: "Wait. The page writes the image, resets the board and reads its USB console." })));
-  if (fromUser && matchMedia("(max-width: 760px)").matches) $("detail").scrollIntoView({ behavior: "smooth", block: "start" });
+  if (fromUser && matchMedia("(max-width: 760px)").matches) ($("usb").hidden ? $("detail-ble") : $("detail")).scrollIntoView({ behavior: "smooth", block: "start" });
   bleRender();
 }
 
