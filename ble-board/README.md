@@ -64,28 +64,28 @@ The same page also updates a board over Bluetooth (Web Bluetooth). It worked fro
 
 1. Run `tools/build-boards.sh`.
 2. Run `tools/make-flash-site.py`. It writes `build/flash-site/` with every full image and app image, their SHA-256 and the board ID. It stops when a build has no image or no text in `flash-site/boards.json`, or when the UUIDs, the commands or the OTA values in `flash-site/scrl.js` differ from `main/scrl_ble.h` and `main/scrl_ota.h`.
-3. Publish the folder as a test release: `tools/release.sh --beta`. The preview app (tsl6-app-preview.surge.sh) offers it. The live app does not. The USB flash site of the test release is at https://n0k0m3.github.io/flipper-tesla-fsd/ble-board/beta/.
-4. After the test, make it stable: `gh release edit ble-board-v<version> -R n0k0m3/flipper-tesla-fsd --prerelease=false --latest`, then `gh workflow run pages.yml -R n0k0m3/flipper-tesla-fsd --ref main`. Do not run `tools/release.sh` again for the same version: it stops when the tag exists. See [Releases](#releases).
+3. Publish the folder as a test release: `tools/release.sh --beta`. It goes to https://scrl-flash-preview.surge.sh. The preview app (tsl6-app-preview.surge.sh) offers it. The live app does not.
+4. After the test, make it stable: `tools/release.sh --promote <version>`. It deploys the same files to https://scrl-flash.surge.sh. See [Releases](#releases).
 
-Old sites: https://scrl-flash.surge.sh (0.6.1) and https://scrl-flash-preview.surge.sh. App copies from before the releases read them, so keep them up.
+Live site: https://scrl-flash.surge.sh (stable release). Preview site: https://scrl-flash-preview.surge.sh (test release).
 
-The site has a `CORS` file for the old app copies. `builds.json` gives each build its board ID and its CAN controller (`can_id`).
+The site has a `CORS` file, so the control app (another origin) reads `builds.json` and the app images. `builds.json` gives each build its board ID and its CAN controller (`can_id`), and since the releases the release `tag`.
 "Erase the whole flash first" is on by default: for a first install the board then makes a new passkey. The page checks the SHA-256 of the download and the chip before it writes.
 
 ## Releases
 
 The source is public: Forgejo (main repo) and the GitHub fork `n0k0m3/flipper-tesla-fsd`. Each push to the `forgejo` remote goes to both: the remote has two push URLs on the owner's clone. Make tags here, never on GitHub only.
 
-`tools/release.sh [--beta] [SITE_DIR]` publishes the flash site of step 2 as a GitHub release:
+`tools/release.sh [--beta] [SITE_DIR]` publishes the flash site of step 2:
 
-1. It checks the SHA-256 of every image against `builds.json`.
+1. It checks the SHA-256 of every image against `builds.json`, and adds the release `tag` to `builds.json`.
 2. It makes the signed tag `ble-board-v<version>` on the commit of `builds.json`, and pushes it to Forgejo and GitHub. A stable release must be on `forgejo/main`.
-3. It makes the GitHub release with all images, `builds.json` and the flash site as assets. A version with `-` (`0.7.0-rc.1`) or `--beta` makes a pre-release.
-4. It runs the `pages` workflow. The workflow copies the newest stable release to https://n0k0m3.github.io/flipper-tesla-fsd/ble-board/ and a newer test release to `.../ble-board/beta/`. Each is the USB flash site with its images and `builds.json` (plus `"tag"`).
+3. It makes the GitHub release with all images, `builds.json` and the flash site as assets. A version with `-` (`0.7.0-rc.1`) or `--beta` makes a pre-release (test release).
+4. It deploys the same files to surge: a test release to the preview site, a stable release to the live site. It checks that the site serves the new `builds.json`.
 
-A browser cannot download a release asset: GitHub sends no CORS header for it. GitHub Pages sends `Access-Control-Allow-Origin: *`. So the control app reads `builds.json` and the images from Pages, and it checks the SHA-256 of the image against the release asset (`digest` in the GitHub API). The live app offers only the stable release. The preview app also offers the test release.
+`tools/release.sh --promote <version>` marks a test release stable on GitHub, downloads its assets, checks them, and deploys them to the live site. A version with `-` cannot be stable: make a new release without it.
 
-After a change of a release on the GitHub page, run the workflow again: `gh workflow run pages.yml -R n0k0m3/flipper-tesla-fsd --ref main`.
+The control app reads `builds.json` and the images from the flash site: a browser cannot download a GitHub release asset (GitHub sends no CORS header for it). Before it offers an update, the app checks the SHA-256 of the image against the release asset (`digest` in the GitHub API). So the flash site must hold the files of the release. The live app reads only the live site. The preview app also reads the preview site.
 
 ## NanoH2: before the first power-up with the Grove cable
 
@@ -318,7 +318,7 @@ The design is "4. Firmware plan" in the private note `ble-board/design.md`.
 | `main/Kconfig.projbuild`, `boards/` | Board choice and the options of each build |
 | `tools/build-boards.sh` | Builds every board |
 | `flash-site/`, `tools/make-flash-site.py` | Flash site (USB flash, Bluetooth update): page, board texts, generator |
-| `tools/release.sh`, `../.github/workflows/pages.yml` | GitHub release of a flash site, and its copy on GitHub Pages |
+| `tools/release.sh` | GitHub release of a flash site, and its deploy to surge |
 
 ## Tests
 
