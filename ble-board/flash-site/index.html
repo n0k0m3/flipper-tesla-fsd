@@ -35,7 +35,7 @@
     --bg: #0f1318; --card: #171c23; --card-2: #1d232b; --ink: #e6e9ee; --muted: #a2acba; --line: #2c333d; --line-2: #232931;
     --accent: #4d8dff; --accent-text: #8ab4ff; --accent-ink: #0c1220; --accent-soft: #172440; --btn-b: #667081;
     --warn: #fbbf24; --warn-soft: #2b2210; --bad: #f87171; --bad-soft: #2d1515; --ok: #4ade80; --ok-soft: #12291c;
-    --cl-bg: #212b39; --cl-line: #3d4a5e; --console: #090b0e;
+    --cl-bg: #090c10; --cl-line: #3d4a5e; --console: #090b0e;
     color-scheme: dark;
   }
 }
@@ -43,7 +43,7 @@
   --bg: #0f1318; --card: #171c23; --card-2: #1d232b; --ink: #e6e9ee; --muted: #a2acba; --line: #2c333d; --line-2: #232931;
   --accent: #4d8dff; --accent-text: #8ab4ff; --accent-ink: #0c1220; --accent-soft: #172440; --btn-b: #667081;
   --warn: #fbbf24; --warn-soft: #2b2210; --bad: #f87171; --bad-soft: #2d1515; --ok: #4ade80; --ok-soft: #12291c;
-  --cl-bg: #212b39; --cl-line: #3d4a5e; --console: #090b0e;
+  --cl-bg: #090c10; --cl-line: #3d4a5e; --console: #090b0e;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -88,6 +88,8 @@ details.notice p { margin: 8px 0 2px; }
 .step h2, .list > h2 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 20px; line-height: 1.2; }
 h2 .n { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; flex: none;
   border: 1.5px solid var(--ink); font: 700 15px/1 var(--font-head); }
+#notes { border-top: 1px solid var(--line-2); }
+#notes h2 { font-size: 18px; margin: 0; }
 .step > p, .hint { margin: 6px 0 0; color: var(--muted); font-size: 15px; max-width: 70ch; }
 
 /* step 1: the boards, grouped by chip */
@@ -133,7 +135,7 @@ ol.steps li + li { margin-top: 4px; }
 progress { width: 100%; height: 8px; margin-top: 8px; accent-color: var(--accent); }
 
 /* step 3: the passkey. The one bold thing: it is what the user must carry to the app. */
-.passkey { margin-top: 14px; border-radius: 12px; padding: 18px 20px; background: var(--cl-bg); color: var(--cl-fg); }
+.passkey { margin-top: 14px; border-radius: 12px; padding: 18px 20px; background: var(--cl-bg); color: var(--cl-fg); border: 1px solid var(--cl-line); }
 .passkey .label { font-size: 14px; font-weight: 600; color: var(--cl-muted); display: flex; align-items: center; gap: 8px; }
 .passkey .label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--cl-green); }
 .passkey .digits { font: 700 clamp(44px, 8vw, 68px)/1.05 var(--font-head); letter-spacing: .08em; margin: 6px 0 4px; font-variant-numeric: tabular-nums; }
@@ -183,7 +185,13 @@ footer p { margin: 0 0 6px; }
   .list.picked .change { display: inline-block; }
 }
 @media (max-width: 560px) { #usb .step > .actions .btn, #ble .step > .actions .btn { flex: 1 1 100%; } }
-@media (max-width: 560px) { .applink { min-height: 40px; padding: 0 12px; font-size: 15px; } }
+@media (max-width: 560px) {
+  /* Only the title shares a row with the button; the text below uses the full width. */
+  .top { display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 12px; }
+  .top > div { display: contents; }
+  .applink { grid-row: 1; grid-column: 2; min-height: 40px; padding: 0 12px; font-size: 15px; }
+  .top p, .top .meta { grid-column: 1 / -1; }
+}
 @media (max-width: 560px) { .top h1 { font-size: 26px; } .step { padding: 16px; } .list > h2 { padding: 16px 16px 6px; } .group { padding: 12px 16px 4px; } .board { padding-left: 13px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
@@ -241,8 +249,8 @@ footer p { margin: 0 0 6px; }
         <div class="step">
           <h2><span class="n">3</span>Write down the passkey and pair</h2>
           <p id="pkwait">The passkey shows here after the flash. The board shows it only on this USB console.</p>
-          <div class="passkey" id="passkey" hidden>
-            <div class="label">BLE passkey</div>
+          <div class="passkey" id="passkey" role="status" aria-live="polite" hidden>
+            <div class="label">Passkey read. You can unplug the board.</div>
             <div class="digits" id="digits">------</div>
             <p id="pkboard"></p>
             <p>Write these 6 digits on a label on the board. Then pair from the app within 5 minutes after power-on: Connect, and pick <b>SCRL-xxxx</b>.</p>
@@ -279,6 +287,10 @@ footer p { margin: 0 0 6px; }
           <h2><span class="n">3</span>Check and confirm the new image</h2>
           <p>The new image runs in Listen-Only until you confirm it. With Vehicle CAN connected and the car awake, the CAN frame count must rise. If no frames arrive, do not confirm: the board goes back to the old image by itself.</p>
         </div>
+      </div>
+      <div class="step" id="notes" hidden>
+        <h2>Before you put the board in the car</h2>
+        <ul class="notes" id="noteslist"></ul>
       </div>
     </section>
   </div>
@@ -442,7 +454,7 @@ async function readConsole(port, { reset }) {
           consoleWrite(line);
           const m = line.match(PASSKEY_RE);
           if (m) {
-            if (!found) setStatus("Passkey read. You can unplug the board.", "ok");
+            if (!found) setStatus(""); // the passkey card says it, next to the digits
             found = true;
             showPasskey(m[1], m[2]);
           }
@@ -768,7 +780,6 @@ function select(id, fromUser = false) {
     el("h3", { text: b.name }),
     el("div", { class: "sub", text: `${b.chip}, build ${b.id}` }),
     el("dl", null, el("dt", { text: "CAN" }), el("dd", { text: b.can })),
-    b.notes.length ? el("ul", { class: "notes" }, b.notes.map(t => el("li", { text: t }))) : null,
     // The image facts are for a check, not for the work: folded. The wiring notes above stay open.
     el("details", { class: "imgfacts" }, el("summary", { text: `Image details: firmware ${data.version}` }),
       el("dl", null,
@@ -778,6 +789,9 @@ function select(id, fromUser = false) {
       el("div", { class: "dl" }, "Files: ",
         el("a", { href: `firmware/scrl-${b.id}-full.bin`, download: true, text: "full image (USB)" }), ", ",
         el("a", { href: `firmware/${b.app}`, download: true, text: "app image (BLE update)" }))));
+  // The board notes are about the wiring in the car: they come after the flash, before the install.
+  $("notes").hidden = !b.notes.length;
+  $("noteslist").replaceChildren(...b.notes.map(t => el("li", { text: t })));
   $("flash").textContent = `Flash ${b.chip} and read passkey`;
   $("steps").replaceChildren(
     el("ol", { class: "steps" },
