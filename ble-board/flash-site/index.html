@@ -47,7 +47,7 @@
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.5 var(--font); word-spacing: .05em; -webkit-font-smoothing: antialiased; }
 main { max-width: 1000px; margin: 0 auto; padding: 28px 16px 56px; }
 h1, h2, h3 { font-family: var(--font-head); font-weight: 700; letter-spacing: 0; }
 a { color: var(--accent-text); }
@@ -75,7 +75,7 @@ details.notice p { margin: 8px 0 2px; }
 /* path switch: USB for a first install, Bluetooth for an update */
 .paths { display: inline-flex; margin-top: 22px; padding: 3px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); }
 .paths button { appearance: none; border: 0; background: none; color: var(--muted); font: 600 15px/1 var(--font); padding: 0 16px; min-height: 40px; border-radius: 7px; cursor: pointer; }
-.paths button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
+.paths button[aria-selected="true"] { background: var(--card-2); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
 .paths button:disabled { cursor: not-allowed; opacity: .55; }
 .pathnote { margin: 8px 0 0; font-size: 14px; color: var(--muted); }
 
@@ -120,7 +120,7 @@ ul.notes li + li { margin-top: 4px; }
 .check { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; margin-top: 8px; max-width: 70ch; }
 .check input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 .check b { font-weight: 600; }
-ol.steps { margin: 12px 0 0; padding-left: 22px; font-size: 15px; max-width: 70ch; }
+ol.steps { margin: 12px 0 0; padding-left: 22px; font-size: 15px; max-width: 70ch; list-style-type: lower-alpha; } /* a, b, c: the circled numbers are the steps */
 ol.steps li + li { margin-top: 4px; }
 .steps + .hint { margin-top: 8px; }
 .status { margin-top: 12px; font-size: 15px; min-height: 1.5em; }
@@ -171,12 +171,13 @@ td.mono { font-family: var(--mono); font-size: 11.5px; overflow-wrap: anywhere; 
 footer { margin-top: 24px; color: var(--muted); font-size: 14px; max-width: 80ch; }
 footer p { margin: 0 0 6px; }
 [hidden] { display: none !important; }
-.change { display: none; margin: 4px 20px 6px; min-height: 44px; font-weight: 600; }
+.change { display: none; margin: 6px 16px 8px; }
 /* Phone: after a pick, the list folds to the picked board; "Change board" opens it again. */
 @media (max-width: 760px) {
   .list.picked .group, .list.picked .board:not([aria-pressed="true"]) { display: none; }
   .list.picked .change { display: inline-block; }
 }
+@media (max-width: 560px) { #usb .step > .actions .btn, #ble .step > .actions .btn { flex: 1 1 100%; } }
 @media (max-width: 560px) { .top { flex-direction: column; } .top h1 { font-size: 26px; } .step { padding: 16px; } .list > h2 { padding: 16px 16px 6px; } .group { padding: 12px 16px 4px; } .board { padding-left: 13px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
@@ -208,7 +209,7 @@ footer p { margin: 0 0 6px; }
     <nav class="card list" aria-label="Boards">
       <h2><span class="n">1</span>Pick the board</h2>
       <div id="list"></div>
-      <button class="linkbtn change" type="button" id="changeboard">Change board</button>
+      <button class="btn ghost change" type="button" id="changeboard">Change board</button>
     </nav>
     <section class="card">
       <div class="step"><div id="detail"></div></div>
@@ -222,9 +223,9 @@ footer p { margin: 0 0 6px; }
           </div>
           <label class="check"><input type="checkbox" id="erase" checked>
             <span><b>Erase the whole flash first.</b> Keep this on for a first install: the board then makes a new random passkey. Turn it off to keep the passkey, the settings and the bonds.</span></label>
-          <div id="steps"></div>
           <div class="status" id="status" role="status" aria-live="polite"></div>
           <progress id="progress" max="1" value="0" hidden></progress>
+          <div id="steps"></div>
           <details class="console" id="consolebox">
             <summary>USB console</summary>
             <pre id="console" aria-label="USB console output"></pre>
@@ -232,7 +233,7 @@ footer p { margin: 0 0 6px; }
         </div>
         <div class="step">
           <h2><span class="n">3</span>Write down the passkey and pair</h2>
-          <p>The passkey shows here after the flash. The board shows it only on this USB console.</p>
+          <p id="pkwait">The passkey shows here after the flash. The board shows it only on this USB console.</p>
           <div class="passkey" id="passkey" hidden>
             <div class="label">BLE passkey</div>
             <div class="digits" id="digits">------</div>
@@ -353,6 +354,7 @@ function consoleWrite(line) {
 }
 function showPasskey(digits, board) {
   $("passkey").hidden = false;
+  $("pkwait").hidden = true;
   $("flash").classList.add("ghost"); // the work is done: the next action is in the passkey card
   // Two groups of 3 are easier to copy onto a label. The text stays the 6 digits (Copy uses it).
   $("digits").replaceChildren(el("span", { text: digits.slice(0, 3) }), el("span", { text: digits.slice(3) }));
@@ -663,6 +665,7 @@ async function loadImage(b) {
 async function flash() {
   const b = current;
   $("passkey").hidden = true;
+  $("pkwait").hidden = false;
   $("flash").classList.remove("ghost");
   let port;
   try {
@@ -715,6 +718,7 @@ async function flash() {
 
 async function readOnly() {
   $("passkey").hidden = true;
+  $("pkwait").hidden = false;
   $("flash").classList.remove("ghost");
   let port;
   try {
@@ -747,6 +751,7 @@ function select(id, fromUser = false) {
   const b = data.builds.find(x => x.id === id) || data.builds[0];
   current = b;
   $("passkey").hidden = true;
+  $("pkwait").hidden = false;
   $("flash").classList.remove("ghost");
   $("list").closest(".list").classList.add("picked");
   for (const btn of document.querySelectorAll(".board")) btn.setAttribute("aria-pressed", String(btn.dataset.id === b.id));
